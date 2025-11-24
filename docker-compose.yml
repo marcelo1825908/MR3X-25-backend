@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mr3x-backend-nodejs
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=mysql://root:devdb@mysql:3306/mr3x_db_v2
+    depends_on:
+      - mysql
+    networks:
+      - mr3x-network
+
+  mysql:
+    image: mysql:8.0
+    container_name: mr3x-mysql
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=devdb
+      - MYSQL_DATABASE=mr3x_db_v2
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - mr3x-network
+
+volumes:
+  mysql_data:
+
+networks:
+  mr3x-network:
+    driver: bridge
+
