@@ -10,31 +10,11 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   // CORS
-  const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS?.split(',').map(origin => origin.trim()) || [
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'https://mr-3-x-25-frontend.vercel.app',
-    'https://mr3x-25-frontend.vercel.app',
-  ];
-
-  // If CORS_ALLOW_ALL is set to 'true', allow all origins
-  const corsOptions = process.env.CORS_ALLOW_ALL === 'true' 
-    ? {
-        origin: true, // Allow all origins
-        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-        credentials: true,
-        allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-        exposedHeaders: ['Authorization'],
-      }
-    : {
-        origin: allowedOrigins,
-        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-        credentials: true,
-        allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-        exposedHeaders: ['Authorization'],
-      };
-
-  app.enableCors(corsOptions);
+  app.enableCors({
+    origin: ['*'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    credentials: true,
+  });
 
   // Global validation pipe
   app.useGlobalPipes(
