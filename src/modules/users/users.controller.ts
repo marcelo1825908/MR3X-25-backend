@@ -39,6 +39,55 @@ export class UsersController {
     return this.usersService.findOne(userId);
   }
 
+  @Get('tenants')
+  @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.PROPRIETARIO, UserRole.INDEPENDENT_OWNER, UserRole.AGENCY_ADMIN, UserRole.AGENCY_MANAGER, UserRole.BROKER)
+  @ApiOperation({ summary: 'Get tenants based on user scope' })
+  async getTenants(@CurrentUser() user: any) {
+    try {
+      console.log('[UsersController.getTenants] User:', JSON.stringify(user, null, 2));
+      
+      // CEO and ADMIN see all tenants (no scope filtering)
+      if (user?.role === UserRole.CEO || user?.role === UserRole.ADMIN) {
+        return await this.usersService.getTenantsByScope({});
+      }
+      
+      const scope: any = {};
+      
+      if (user?.role === UserRole.PROPRIETARIO || user?.role === UserRole.INDEPENDENT_OWNER) {
+        scope.ownerId = user.sub;
+      }
+      
+      if (user?.role === UserRole.AGENCY_ADMIN) {
+        if (user.agencyId) {
+          scope.agencyId = user.agencyId;
+        } else {
+          return [];
+        }
+      }
+      
+      if (user?.role === UserRole.AGENCY_MANAGER) {
+        scope.managerId = user.sub;
+        if (user.agencyId) {
+          scope.agencyId = user.agencyId;
+        }
+      }
+      
+      if (user?.role === UserRole.BROKER) {
+        scope.brokerId = user.sub;
+        if (user.agencyId) {
+          scope.agencyId = user.agencyId;
+        }
+      }
+      
+      console.log('[UsersController.getTenants] Scope:', JSON.stringify(scope, null, 2));
+      return await this.usersService.getTenantsByScope(scope);
+    } catch (error) {
+      console.error('[UsersController.getTenants] Error:', error);
+      console.error('[UsersController.getTenants] Error stack:', error?.stack);
+      throw error;
+    }
+  }
+
   @Get('document/validate/:document')
   @ApiOperation({ summary: 'Validate if document is available' })
   async validateDocument(@Param('document') document: string) {

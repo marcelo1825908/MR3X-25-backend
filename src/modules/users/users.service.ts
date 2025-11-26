@@ -236,4 +236,125 @@ export class UsersService {
       message: existingUser ? 'Document already registered' : 'Document is available',
     };
   }
+
+  async getTenantsByScope(scope: { ownerId?: string; agencyId?: string; brokerId?: string; managerId?: string }) {
+    try {
+      console.log('[UsersService.getTenantsByScope] Scope:', JSON.stringify(scope, null, 2));
+      
+      // If no scope is provided (CEO/ADMIN), return all tenants
+      if (!scope.ownerId && !scope.agencyId && !scope.brokerId && !scope.managerId) {
+        const tenants = await this.prisma.user.findMany({
+          where: { role: UserRole.INQUILINO },
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            phone: true,
+            document: true,
+            birthDate: true,
+            address: true,
+            cep: true,
+            neighborhood: true,
+            city: true,
+            state: true,
+            createdAt: true,
+          },
+        });
+
+        return tenants.map(tenant => ({
+          ...tenant,
+          id: tenant.id.toString(),
+          birthDate: tenant.birthDate?.toISOString() || null,
+          createdAt: tenant.createdAt?.toISOString() || null,
+        }));
+      }
+
+    let where: any = { role: UserRole.INQUILINO };
+    
+    // Owner sees only own tenants
+    if (scope.ownerId) {
+      where.ownerId = BigInt(scope.ownerId);
+    }
+
+    // AGENCY_ADMIN: sees all tenants in their agency
+    if (scope.agencyId && !scope.ownerId && !scope.managerId && !scope.brokerId) {
+      where.agencyId = BigInt(scope.agencyId);
+    }
+
+    // BROKER: sees only tenants created by themselves
+    if (scope.brokerId) {
+      where.createdBy = BigInt(scope.brokerId);
+    }
+
+    // AGENCY_MANAGER: sees tenants created by themselves AND tenants created by brokers they manage
+    if (scope.managerId) {
+      // Find all brokers managed by this manager (brokers created by this manager)
+      const managedBrokers = await this.prisma.user.findMany({
+        where: {
+          role: UserRole.BROKER,
+          createdBy: BigInt(scope.managerId),
+          ...(scope.agencyId ? { agencyId: BigInt(scope.agencyId) } : {}),
+        },
+        select: { id: true },
+      });
+      
+      const managedBrokerIds = managedBrokers.map(b => b.id);
+      
+      // Manager sees:
+      // 1. Tenants created by the manager themselves
+      // 2. Tenants created by brokers managed by this manager
+      where = {
+        AND: [
+          { role: UserRole.INQUILINO },
+          {
+            OR: [
+              { createdBy: BigInt(scope.managerId) },
+              ...(managedBrokerIds.length > 0 ? [{ createdBy: { in: managedBrokerIds } }] : []),
+            ],
+          },
+        ],
+      };
+      
+      // Also filter by agencyId if provided (to ensure tenants belong to the same agency)
+      if (scope.agencyId) {
+        where.AND.push({ agencyId: BigInt(scope.agencyId) });
+      }
+    }
+
+    const tenants = await this.prisma.user.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        document: true,
+        birthDate: true,
+        address: true,
+        cep: true,
+        neighborhood: true,
+        city: true,
+        state: true,
+        createdAt: true,
+      },
+    });
+
+      // Serialize BigInt fields
+      const result = tenants.map(tenant => ({
+        ...tenant,
+        id: tenant.id.toString(),
+        birthDate: tenant.birthDate?.toISOString() || null,
+        createdAt: tenant.createdAt?.toISOString() || null,
+      }));
+      
+      console.log('[UsersService.getTenantsByScope] Result count:', result.length);
+      return result;
+    } catch (error) {
+      console.error('[UsersService.getTenantsByScope] Error:', error);
+      console.error('[UsersService.getTenantsByScope] Error stack:', error?.stack);
+      throw error;
+    }
+  }
 }
