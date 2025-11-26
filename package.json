@@ -13,6 +13,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "node scripts/migrate.js",
     "db:migrate:name": "node scripts/migrate.js",
+    "db:migrate:dev": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
     "db:push": "prisma db push",
