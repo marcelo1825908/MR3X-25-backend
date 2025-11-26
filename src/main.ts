@@ -9,7 +9,10 @@ async function bootstrap() {
   // CORS must be enabled BEFORE global prefix and other middleware
   // CORS - Allow all origins with proper preflight handling
   app.enableCors({
-    origin: true, // Allow all origins
+    origin: (origin, callback) => {
+      // Allow all origins - no restrictions
+      callback(null, true);
+    },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
     allowedHeaders: [
       'Content-Type',
@@ -26,6 +29,8 @@ async function bootstrap() {
     preflightContinue: false,
     optionsSuccessStatus: 204,
   });
+  
+  console.log('✅ CORS enabled - allowing all origins');
 
   // Global prefix
   app.setGlobalPrefix('api');
