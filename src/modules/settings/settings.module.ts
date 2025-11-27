@@ -1,7 +1,12 @@
 import { Module } from '@nestjs/common';
+import { SettingsController } from './settings.controller';
+import { SettingsService } from './settings.service';
+import { PrismaModule } from '../../config/prisma.module';
 
 @Module({
-  controllers: [],
-  providers: [],
+  imports: [PrismaModule],
+  controllers: [SettingsController],
+  providers: [SettingsService],
+  exports: [SettingsService],
 })
 export class SettingsModule {}
