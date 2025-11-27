@@ -91,6 +91,7 @@ export class UsersService {
       brokerId: result.brokerId?.toString(),
       createdBy: result.createdBy?.toString(),
       legalRepresentativeId: result.legalRepresentativeId?.toString(),
+      plainPassword: result.plainPassword,
     };
   }
 
@@ -127,6 +128,7 @@ export class UsersService {
       data: {
         email: dto.email,
         password: hashedPassword,
+        plainPassword: dto.password,
         name: dto.name,
         role: dto.role,
         plan: dto.plan || 'FREE',
@@ -189,6 +191,7 @@ export class UsersService {
 
     if (dto.password) {
       updateData.password = await bcrypt.hash(dto.password, 10);
+      updateData.plainPassword = dto.password;
     }
 
     if (dto.agencyId !== undefined) {
@@ -491,6 +494,7 @@ export class UsersService {
       data: {
         email: dto.email,
         password: hashedPassword,
+        plainPassword: dto.password,
         name: dto.name,
         role: UserRole.INQUILINO,
         plan: dto.plan || 'FREE',
@@ -522,6 +526,7 @@ export class UsersService {
         createdAt: true,
         createdBy: true,
         agencyId: true,
+        plainPassword: true,
       },
     });
 
@@ -554,6 +559,7 @@ export class UsersService {
     if (dto.phone !== undefined) updateData.phone = dto.phone;
     if (dto.password !== undefined && dto.password.length > 0) {
       updateData.password = await bcrypt.hash(dto.password, 10);
+      updateData.plainPassword = dto.password;
     }
     if (dto.address !== undefined) updateData.address = dto.address;
     if (dto.cep !== undefined) updateData.cep = dto.cep;
@@ -581,6 +587,7 @@ export class UsersService {
         state: true,
         createdAt: true,
         agencyId: true,
+        plainPassword: true,
       },
     });
 

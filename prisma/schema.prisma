@@ -91,6 +91,7 @@ model User {
   id                      BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
   email                   String    @unique @db.VarChar(191)
   password                String    @db.VarChar(255)
+  plainPassword           String?   @map("plain_password") @db.VarChar(255)
   role                    UserRole
   plan                    String    @db.VarChar(20)
   emailVerified           Boolean   @default(false) @map("email_verified")
