@@ -366,7 +366,7 @@ export class DashboardService {
       const adminId = BigInt(userId);
 
       // Properties created by this admin
-      const [properties, contracts, paymentsThisMonth, recentPayments] = await Promise.all([
+      const [properties, contracts, paymentsThisMonth, recentPayments, agencies] = await Promise.all([
         this.prisma.property.findMany({
           where: {
             deleted: false,
@@ -429,6 +429,28 @@ export class DashboardService {
             },
           },
         }),
+        // Get agencies that have properties created by this admin
+        this.prisma.agency.findMany({
+          where: {
+            status: 'ACTIVE',
+            properties: {
+              some: {
+                createdBy: adminId,
+              },
+            },
+          },
+          include: {
+            _count: {
+              select: {
+                properties: true,
+                users: true,
+                contracts: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+        }),
       ]);
 
       const pendingContracts = contracts.filter((contract: any) => {
@@ -437,7 +459,23 @@ export class DashboardService {
         return contract.lastPaymentDate < thirtyDaysAgo;
       });
 
-      return this.buildDashboardResponse(properties, contracts, paymentsThisMonth, pendingContracts, recentPayments);
+      // Build base dashboard response
+      const baseDashboard = this.buildDashboardResponse(properties, contracts, paymentsThisMonth, pendingContracts, recentPayments);
+
+      // Add topAgencies for ADMIN
+      const topAgencies = agencies.map((agency: any) => ({
+        id: agency.id.toString(),
+        name: agency.name,
+        propertyCount: agency._count.properties,
+        userCount: agency._count.users,
+        contractCount: agency._count.contracts,
+        plan: agency.plan,
+      }));
+
+      return {
+        ...baseDashboard,
+        topAgencies,
+      };
     } catch (error: any) {
       console.error('Error in getAdminDashboard:', error);
       return this.emptyDashboard();
