@@ -245,6 +245,7 @@ export class UsersService {
     if (dto.birthDate !== undefined) {
       updateData.birthDate = dto.birthDate ? new Date(dto.birthDate) : null;
     }
+    if (dto.status !== undefined) updateData.status = dto.status;
 
     if (dto.password) {
       updateData.password = await bcrypt.hash(dto.password, 10);

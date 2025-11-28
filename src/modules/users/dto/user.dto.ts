@@ -83,6 +83,11 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   userType?: string;
+
+  @ApiPropertyOptional({ example: 'ACTIVE' })
+  @IsOptional()
+  @IsString()
+  status?: string;
 }
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {}
