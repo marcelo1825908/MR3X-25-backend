@@ -322,21 +322,26 @@ model Document {
 }
 
 model Payment {
-  id            BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
-  valorPago     Decimal  @map("valor_pago") @db.Decimal(19, 2)
-  dataPagamento DateTime @map("data_pagamento") @db.Timestamp(0)
-  contratoId    BigInt   @map("contrato_id") @db.UnsignedBigInt
-  propertyId    BigInt   @map("property_id") @db.UnsignedBigInt
-  userId        BigInt   @map("user_id") @db.UnsignedBigInt
-  agencyId      BigInt?  @map("agency_id") @db.UnsignedBigInt
-  comprovante   Bytes?   @db.Blob
-  tipo          String   @db.VarChar(20)
+  id            BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  valorPago     Decimal   @map("valor_pago") @db.Decimal(19, 2)
+  dataPagamento DateTime  @map("data_pagamento") @db.Timestamp(0)
+  contratoId    BigInt?   @map("contrato_id") @db.UnsignedBigInt
+  propertyId    BigInt    @map("property_id") @db.UnsignedBigInt
+  userId        BigInt    @map("user_id") @db.UnsignedBigInt
+  agencyId      BigInt?   @map("agency_id") @db.UnsignedBigInt
+  comprovante   Bytes?    @db.Blob
+  tipo          String    @db.VarChar(20)
+  description   String?   @db.VarChar(255)
+  dueDate       DateTime? @map("due_date") @db.Date
+  status        String?   @default("PENDING") @db.VarChar(20)
+  paymentMethod String?   @map("payment_method") @db.VarChar(50)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
 
   // Relations
-  property Property @relation(fields: [propertyId], references: [id])
-  contract Contract @relation(fields: [contratoId], references: [id])
-  user     User     @relation(fields: [userId], references: [id])
-  agency   Agency?  @relation(fields: [agencyId], references: [id])
+  property Property  @relation(fields: [propertyId], references: [id])
+  contract Contract? @relation(fields: [contratoId], references: [id])
+  user     User      @relation(fields: [userId], references: [id])
+  agency   Agency?   @relation(fields: [agencyId], references: [id])
 
   @@map("payments")
 }

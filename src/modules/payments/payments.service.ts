@@ -124,6 +124,35 @@ export class PaymentsService {
     }
   }
 
+  async findByProperty(propertyId: string, userId: string, role: string) {
+    try {
+      const payments = await this.prisma.payment.findMany({
+        where: { propertyId: BigInt(propertyId) },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
+
+      return payments.map(payment => ({
+        id: payment.id.toString(),
+        valorPago: payment.valorPago?.toString(),
+        dataPagamento: payment.dataPagamento?.toISOString(),
+        contratoId: payment.contratoId?.toString() || null,
+        propertyId: payment.propertyId?.toString(),
+        userId: payment.userId?.toString(),
+        agencyId: payment.agencyId?.toString() || null,
+        tipo: payment.tipo,
+        description: payment.description,
+        dueDate: payment.dueDate?.toISOString() || null,
+        status: payment.status,
+        paymentMethod: payment.paymentMethod,
+        createdAt: payment.createdAt?.toISOString() || null,
+      }));
+    } catch (error: any) {
+      console.error('Error in findByProperty service:', error);
+      throw error;
+    }
+  }
+
   async findOne(paymentId: string, userId: string, role: string) {
     const payment = await this.prisma.payment.findUnique({
       where: { id: BigInt(paymentId) },
@@ -206,25 +235,31 @@ export class PaymentsService {
         throw new NotFoundException('Property not found');
       }
 
-      // Verify contract exists
-      const contract = await this.prisma.contract.findUnique({
-        where: { id: BigInt(data.contratoId) },
-      });
+      // Verify contract exists if provided
+      if (data.contratoId) {
+        const contract = await this.prisma.contract.findUnique({
+          where: { id: BigInt(data.contratoId) },
+        });
 
-      if (!contract) {
-        throw new NotFoundException('Contract not found');
+        if (!contract) {
+          throw new NotFoundException('Contract not found');
+        }
       }
 
       const payment = await this.prisma.payment.create({
         data: {
           valorPago: data.valorPago,
           dataPagamento: new Date(data.dataPagamento),
-          contratoId: BigInt(data.contratoId),
+          contratoId: data.contratoId ? BigInt(data.contratoId) : null,
           propertyId: BigInt(data.propertyId),
           userId: BigInt(userId),
           agencyId: property.agencyId,
           tipo: data.tipo,
           comprovante: data.comprovante ? Buffer.from(data.comprovante, 'base64') : null,
+          description: data.description || null,
+          dueDate: data.dueDate ? new Date(data.dueDate) : null,
+          status: data.status || 'PENDING',
+          paymentMethod: data.paymentMethod || null,
         },
         include: {
           property: {
@@ -251,23 +286,38 @@ export class PaymentsService {
         },
       });
 
-      // Update contract's last payment date
-      await this.prisma.contract.update({
-        where: { id: BigInt(data.contratoId) },
-        data: {
-          lastPaymentDate: new Date(data.dataPagamento),
-        },
-      });
+      // Update contract's last payment date if contract exists
+      if (data.contratoId) {
+        await this.prisma.contract.update({
+          where: { id: BigInt(data.contratoId) },
+          data: {
+            lastPaymentDate: new Date(data.dataPagamento),
+          },
+        });
+      }
+
+      // Update property's next due date if dueDate is provided
+      if (data.dueDate) {
+        await this.prisma.property.update({
+          where: { id: BigInt(data.propertyId) },
+          data: {
+            nextDueDate: new Date(data.dueDate),
+          },
+        });
+      }
 
       return {
         id: payment.id.toString(),
         valorPago: payment.valorPago?.toString(),
         dataPagamento: payment.dataPagamento?.toISOString(),
-        contratoId: payment.contratoId?.toString(),
+        contratoId: payment.contratoId?.toString() || null,
         propertyId: payment.propertyId?.toString(),
         userId: payment.userId?.toString(),
         agencyId: payment.agencyId?.toString() || null,
         tipo: payment.tipo,
+        description: payment.description,
+        dueDate: payment.dueDate?.toISOString() || null,
+        status: payment.status,
         property: payment.property ? {
           id: payment.property.id.toString(),
           name: payment.property.name,

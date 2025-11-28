@@ -159,6 +159,8 @@ export class PropertiesService {
       createdBy: property.createdBy?.toString(),
       deletedBy: property.deletedBy?.toString(),
       monthlyRent: property.monthlyRent?.toString(),
+      nextDueDate: property.nextDueDate?.toISOString() || null,
+      createdAt: property.createdAt?.toISOString() || null,
       owner: property.owner ? { ...property.owner, id: property.owner.id.toString() } : null,
       tenant: property.tenant ? { ...property.tenant, id: property.tenant.id.toString() } : null,
       broker: property.broker ? { ...property.broker, id: property.broker.id.toString() } : null,

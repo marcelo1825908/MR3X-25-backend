@@ -46,6 +46,14 @@ export class UsersController {
     return this.usersService.findOne(userId);
   }
 
+  @Get('check-email')
+  @ApiOperation({ summary: 'Check if email already exists' })
+  @ApiQuery({ name: 'email', required: true })
+  async checkEmail(@Query('email') email: string) {
+    const user = await this.usersService.findByEmail(email);
+    return { exists: !!user };
+  }
+
   @Get('tenants')
   @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.PROPRIETARIO, UserRole.INDEPENDENT_OWNER, UserRole.AGENCY_ADMIN, UserRole.AGENCY_MANAGER, UserRole.BROKER)
   @ApiOperation({ summary: 'Get tenants based on user scope' })
@@ -127,6 +135,16 @@ export class UsersController {
     return this.usersService.validateDocument(document);
   }
 
+  @Get('allowed-roles')
+  @ApiOperation({ summary: 'Get roles that the current user can create' })
+  async getAllowedRoles(@CurrentUser() user: any) {
+    if (!user?.role) {
+      return { allowedRoles: [] };
+    }
+    const allowedRoles = this.usersService.getAllowedRolesToCreate(user.role as UserRole);
+    return { allowedRoles };
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get user by ID' })
   async findOne(@Param('id') id: string) {
@@ -134,10 +152,11 @@ export class UsersController {
   }
 
   @Post()
-  @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.AGENCY_ADMIN)
+  @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.AGENCY_ADMIN, UserRole.AGENCY_MANAGER, UserRole.INDEPENDENT_OWNER)
   @ApiOperation({ summary: 'Create a new user' })
-  async create(@Body() dto: CreateUserDto, @CurrentUser('sub') creatorId: string) {
-    return this.usersService.create(dto, creatorId);
+  async create(@Body() dto: CreateUserDto, @CurrentUser() user: any) {
+    // Pass creator's role to validate role creation hierarchy
+    return this.usersService.create(dto, user?.sub, user?.role as UserRole);
   }
 
   @Put(':id')

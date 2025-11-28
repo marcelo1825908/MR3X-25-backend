@@ -1,12 +1,64 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../config/prisma.service';
 import { CreateUserDto, UpdateUserDto, CreateTenantDto, UpdateTenantDto } from './dto/user.dto';
 import * as bcrypt from 'bcryptjs';
 import { UserRole } from '@prisma/client';
 
+/**
+ * Role Creation Hierarchy - Who can create which roles
+ * Based on MR3X Complete Hierarchy Requirements:
+ *
+ * CEO -> ADMIN only
+ * ADMIN -> AGENCY_MANAGER (MR3X), LEGAL_AUDITOR, REPRESENTATIVE, API_CLIENT
+ * AGENCY_ADMIN -> AGENCY_MANAGER, BROKER, PROPRIETARIO
+ * AGENCY_MANAGER -> BROKER, PROPRIETARIO
+ * BROKER -> NONE (cannot create users)
+ * PROPRIETARIO -> NONE (cannot create users)
+ * INDEPENDENT_OWNER -> INQUILINO, BUILDING_MANAGER
+ * INQUILINO -> NONE
+ * BUILDING_MANAGER -> NONE
+ * LEGAL_AUDITOR -> NONE
+ * REPRESENTATIVE -> NONE
+ * API_CLIENT -> NONE
+ */
+const ROLE_CREATION_ALLOWED: Record<UserRole, UserRole[]> = {
+  [UserRole.CEO]: [UserRole.ADMIN],
+  [UserRole.ADMIN]: [UserRole.AGENCY_MANAGER, UserRole.LEGAL_AUDITOR, UserRole.REPRESENTATIVE, UserRole.API_CLIENT],
+  [UserRole.AGENCY_ADMIN]: [UserRole.AGENCY_MANAGER, UserRole.BROKER, UserRole.PROPRIETARIO],
+  [UserRole.AGENCY_MANAGER]: [UserRole.BROKER, UserRole.PROPRIETARIO],
+  [UserRole.BROKER]: [], // Cannot create users
+  [UserRole.PROPRIETARIO]: [], // Cannot create users
+  [UserRole.INDEPENDENT_OWNER]: [UserRole.INQUILINO, UserRole.BUILDING_MANAGER],
+  [UserRole.INQUILINO]: [],
+  [UserRole.BUILDING_MANAGER]: [],
+  [UserRole.LEGAL_AUDITOR]: [],
+  [UserRole.REPRESENTATIVE]: [],
+  [UserRole.API_CLIENT]: [],
+};
+
 @Injectable()
 export class UsersService {
   constructor(private prisma: PrismaService) {}
+
+  /**
+   * Validates if a creator role can create a target role
+   */
+  validateRoleCreation(creatorRole: UserRole, targetRole: UserRole): void {
+    const allowedRoles = ROLE_CREATION_ALLOWED[creatorRole] || [];
+    if (!allowedRoles.includes(targetRole)) {
+      throw new ForbiddenException(
+        `Usuário com função ${creatorRole} não pode criar usuários com função ${targetRole}. ` +
+        `Funções permitidas: ${allowedRoles.length > 0 ? allowedRoles.join(', ') : 'nenhuma'}`
+      );
+    }
+  }
+
+  /**
+   * Gets the list of roles a creator can create
+   */
+  getAllowedRolesToCreate(creatorRole: UserRole): UserRole[] {
+    return ROLE_CREATION_ALLOWED[creatorRole] || [];
+  }
 
   async findAll(params: {
     skip?: number;
@@ -101,7 +153,12 @@ export class UsersService {
     });
   }
 
-  async create(dto: CreateUserDto, creatorId?: string) {
+  async create(dto: CreateUserDto, creatorId?: string, creatorRole?: UserRole) {
+    // Validate role creation hierarchy if creator role is provided
+    if (creatorRole && dto.role) {
+      this.validateRoleCreation(creatorRole, dto.role as UserRole);
+    }
+
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });

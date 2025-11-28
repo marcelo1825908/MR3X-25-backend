@@ -8,6 +8,13 @@ export enum PaymentType {
   OUTROS = 'OUTROS',
 }
 
+export enum PaymentStatus {
+  PENDING = 'PENDING',
+  PAID = 'PAID',
+  OVERDUE = 'OVERDUE',
+  CANCELLED = 'CANCELLED',
+}
+
 export class CreatePaymentDto {
   @ApiProperty({ description: 'Payment amount', example: 1500.00 })
   @IsNumber()
@@ -18,9 +25,10 @@ export class CreatePaymentDto {
   @IsString()
   dataPagamento: string;
 
-  @ApiProperty({ description: 'Contract ID', example: '1' })
+  @ApiPropertyOptional({ description: 'Contract ID', example: '1' })
   @IsString()
-  contratoId: string;
+  @IsOptional()
+  contratoId?: string;
 
   @ApiProperty({ description: 'Property ID', example: '1' })
   @IsString()
@@ -34,4 +42,24 @@ export class CreatePaymentDto {
   @IsString()
   @IsOptional()
   comprovante?: string;
+
+  @ApiPropertyOptional({ description: 'Description of the charge' })
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @ApiPropertyOptional({ description: 'Due date for the charge', example: '2024-01-15' })
+  @IsString()
+  @IsOptional()
+  dueDate?: string;
+
+  @ApiPropertyOptional({ description: 'Payment status', enum: PaymentStatus, example: PaymentStatus.PENDING })
+  @IsEnum(PaymentStatus)
+  @IsOptional()
+  status?: PaymentStatus;
+
+  @ApiPropertyOptional({ description: 'Payment method', example: 'PIX' })
+  @IsString()
+  @IsOptional()
+  paymentMethod?: string;
 }

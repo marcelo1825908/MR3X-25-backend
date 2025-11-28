@@ -37,6 +37,16 @@ export class PaymentsController {
     return this.paymentsService.getAnnualReport(userId, role, yearNum, agencyId);
   }
 
+  @Get('property/:propertyId')
+  @ApiOperation({ summary: 'Get payments by property ID' })
+  async findByProperty(
+    @Param('propertyId') propertyId: string,
+    @CurrentUser('sub') userId: string,
+    @CurrentUser('role') role: string,
+  ) {
+    return this.paymentsService.findByProperty(propertyId, userId, role);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get payment by ID' })
   async findOne(

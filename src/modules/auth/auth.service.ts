@@ -336,6 +336,19 @@ export class AuthService {
       throw new BadRequestException('Invalid registration token');
     }
 
+    // Self-registration is only allowed for AGENCY_ADMIN and INDEPENDENT_OWNER
+    // Per MR3X Hierarchy Requirements:
+    // - AGENCY_ADMIN: Self-registers and creates their own agency
+    // - INDEPENDENT_OWNER: Self-registers as "mini real estate agency"
+    // - All other roles must be created by authorized users
+    const ALLOWED_SELF_REGISTRATION_ROLES: UserRole[] = [UserRole.AGENCY_ADMIN, UserRole.INDEPENDENT_OWNER];
+    if (!ALLOWED_SELF_REGISTRATION_ROLES.includes(dto.role)) {
+      throw new BadRequestException(
+        `Auto-registro não é permitido para a função ${dto.role}. ` +
+        `Apenas Diretor de Agência (AGENCY_ADMIN) e Proprietário Independente (INDEPENDENT_OWNER) podem se auto-registrar.`
+      );
+    }
+
     const existingUser = await this.prisma.user.findUnique({
       where: { email },
     });

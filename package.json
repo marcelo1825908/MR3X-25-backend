@@ -5,23 +5,12 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "nest build",
-    "format": "prettier --write \"src/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
-    "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
-    "db:generate": "prisma generate",
-    "db:migrate": "node scripts/migrate.js",
-    "db:migrate:name": "node scripts/migrate.js",
-    "db:migrate:dev": "prisma migrate dev",
-    "db:migrate:deploy": "prisma migrate deploy",
-    "db:migrate:status": "prisma migrate status",
-    "db:push": "prisma db push",
-    "db:studio": "prisma studio",
-    "postinstall": "prisma generate",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:cov": "jest --coverage"
+    "migrate": "prisma migrate dev && npx ts-node prisma/seed.ts",
+    "seed": "npx ts-node prisma/seed.ts",
+    "postinstall": "prisma generate"
   },
   "keywords": [
     "nestjs",
