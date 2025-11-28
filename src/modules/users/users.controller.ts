@@ -31,11 +31,19 @@ export class UsersController {
     @Query('status') status?: string,
     @CurrentUser() user?: any,
   ) {
-    // ADMIN sees only users they created (each admin is independent)
     // CEO sees all users
+    // ADMIN sees:
+    //   - All AGENCY_ADMIN users (for "Diretor Agência" page)
+    //   - All INDEPENDENT_OWNER users (for "Agências" page)
+    //   - Only users they created for other roles
     let createdById: string | undefined;
     if (user?.role === UserRole.ADMIN) {
-      createdById = user.sub;
+      // If filtering by AGENCY_ADMIN or INDEPENDENT_OWNER role, ADMIN can see all
+      if (role === UserRole.AGENCY_ADMIN || role === UserRole.INDEPENDENT_OWNER) {
+        createdById = undefined; // See all users of these roles
+      } else {
+        createdById = user.sub; // For other roles, only see users they created
+      }
     }
     return this.usersService.findAll({ skip, take, role, agencyId, status, createdById });
   }
