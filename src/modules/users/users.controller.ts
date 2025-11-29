@@ -181,10 +181,10 @@ export class UsersController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.CEO, UserRole.ADMIN)
+  @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.AGENCY_ADMIN, UserRole.AGENCY_MANAGER)
   @ApiOperation({ summary: 'Delete user' })
-  async remove(@Param('id') id: string) {
-    return this.usersService.remove(id);
+  async remove(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.usersService.remove(id, user?.sub, user?.role as UserRole);
   }
 
   @Post('change-password')

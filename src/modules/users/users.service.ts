@@ -380,17 +380,166 @@ export class UsersService {
     };
   }
 
-  async remove(id: string) {
+  async remove(id: string, deleterId?: string, deleterRole?: UserRole) {
     const user = await this.prisma.user.findUnique({
       where: { id: BigInt(id) },
+      select: {
+        id: true,
+        role: true,
+        agencyId: true,
+        createdBy: true,
+      },
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    await this.prisma.user.delete({
-      where: { id: BigInt(id) },
+    // Validate deletion permissions based on role hierarchy
+    if (deleterRole && deleterId) {
+      const userRole = user.role as string;
+
+      // CEO can delete anyone
+      if (deleterRole === UserRole.CEO) {
+        // OK - CEO has full access
+      }
+      // ADMIN can delete users they created or PLATFORM_MANAGER, LEGAL_AUDITOR, REPRESENTATIVE, API_CLIENT
+      else if (deleterRole === UserRole.ADMIN) {
+        const allowedRoles = ['PLATFORM_MANAGER', 'LEGAL_AUDITOR', 'REPRESENTATIVE', 'API_CLIENT'];
+        if (!allowedRoles.includes(userRole)) {
+          throw new ForbiddenException('Você não tem permissão para excluir este usuário.');
+        }
+      }
+      // AGENCY_ADMIN can delete AGENCY_MANAGER, BROKER, PROPRIETARIO in their agency
+      else if (deleterRole === UserRole.AGENCY_ADMIN) {
+        const allowedRoles = ['AGENCY_MANAGER', 'BROKER', 'PROPRIETARIO'];
+        if (!allowedRoles.includes(userRole)) {
+          throw new ForbiddenException('Você não tem permissão para excluir este usuário.');
+        }
+        // Check same agency
+        const deleter = await this.prisma.user.findUnique({
+          where: { id: BigInt(deleterId) },
+          select: { agencyId: true },
+        });
+        if (!deleter?.agencyId || !user.agencyId || deleter.agencyId !== user.agencyId) {
+          throw new ForbiddenException('Você só pode excluir usuários da sua própria agência.');
+        }
+      }
+      // AGENCY_MANAGER can delete BROKER, PROPRIETARIO in their agency
+      else if (deleterRole === UserRole.AGENCY_MANAGER) {
+        const allowedRoles = ['BROKER', 'PROPRIETARIO'];
+        if (!allowedRoles.includes(userRole)) {
+          throw new ForbiddenException('Você não tem permissão para excluir este usuário.');
+        }
+        // Check same agency
+        const deleter = await this.prisma.user.findUnique({
+          where: { id: BigInt(deleterId) },
+          select: { agencyId: true },
+        });
+        if (!deleter?.agencyId || !user.agencyId || deleter.agencyId !== user.agencyId) {
+          throw new ForbiddenException('Você só pode excluir usuários da sua própria agência.');
+        }
+      }
+      else {
+        throw new ForbiddenException('Você não tem permissão para excluir usuários.');
+      }
+    }
+
+    // Delete related records before deleting the user
+    await this.prisma.$transaction(async (tx) => {
+      const userBigInt = BigInt(id);
+
+      // Delete refresh tokens
+      await tx.refreshToken.deleteMany({
+        where: { userId: userBigInt },
+      });
+
+      // Delete notifications where user is owner or tenant
+      await tx.notification.deleteMany({
+        where: {
+          OR: [
+            { tenantId: userBigInt },
+            { ownerId: userBigInt },
+          ],
+        },
+      });
+
+      // Find all chats where user is a participant
+      const userChats = await tx.chat.findMany({
+        where: {
+          OR: [
+            { participant1Id: userBigInt },
+            { participant2Id: userBigInt },
+          ],
+        },
+        select: { id: true },
+      });
+      const chatIds = userChats.map(c => c.id);
+
+      if (chatIds.length > 0) {
+        // Delete ALL active chats for these chats (both participants)
+        await tx.activeChat.deleteMany({
+          where: { chatId: { in: chatIds } },
+        });
+
+        // Delete ALL messages in these chats
+        await tx.message.deleteMany({
+          where: { chatId: { in: chatIds } },
+        });
+
+        // Now delete the chats
+        await tx.chat.deleteMany({
+          where: { id: { in: chatIds } },
+        });
+      }
+
+      // Delete any remaining messages where user is sender/receiver (not in a chat)
+      await tx.message.deleteMany({
+        where: {
+          OR: [
+            { senderId: userBigInt },
+            { receiverId: userBigInt },
+          ],
+        },
+      });
+
+      // Delete audit logs
+      await tx.auditLog.deleteMany({
+        where: { userId: userBigInt },
+      });
+
+      // Nullify user references in properties (broker, creator, tenant)
+      await tx.property.updateMany({
+        where: { brokerId: userBigInt },
+        data: { brokerId: null },
+      });
+      await tx.property.updateMany({
+        where: { createdBy: userBigInt },
+        data: { createdBy: null },
+      });
+      await tx.property.updateMany({
+        where: { tenantId: userBigInt },
+        data: { tenantId: null },
+      });
+
+      // Nullify user references in other users (broker, creator, owner)
+      await tx.user.updateMany({
+        where: { brokerId: userBigInt },
+        data: { brokerId: null },
+      });
+      await tx.user.updateMany({
+        where: { createdBy: userBigInt },
+        data: { createdBy: null },
+      });
+      await tx.user.updateMany({
+        where: { ownerId: userBigInt },
+        data: { ownerId: null },
+      });
+
+      // Finally delete the user
+      await tx.user.delete({
+        where: { id: userBigInt },
+      });
     });
 
     return { message: 'User deleted successfully' };
