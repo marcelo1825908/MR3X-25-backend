@@ -31,6 +31,9 @@ export class DashboardController {
       return this.dashboardService.getManagerDashboard(userId, agencyId);
     } else if (role === 'BROKER') {
       return this.dashboardService.getBrokerDashboard(userId, agencyId, brokerId);
+    } else if (role === 'INDEPENDENT_OWNER') {
+      // INDEPENDENT_OWNER sees only properties they created (not by ownerId)
+      return this.dashboardService.getIndependentOwnerDashboard(userId);
     } else {
       return this.dashboardService.getOwnerDashboard(userId);
     }

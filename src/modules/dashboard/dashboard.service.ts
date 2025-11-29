@@ -482,6 +482,109 @@ export class DashboardService {
     }
   }
 
+  // Dashboard for INDEPENDENT_OWNER - shows only properties they created (by createdBy, not ownerId)
+  async getIndependentOwnerDashboard(userId: string) {
+    const now = new Date();
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const creatorId = BigInt(userId);
+
+    const [properties, contracts, paymentsThisMonth, recentPayments] = await Promise.all([
+      this.prisma.property.findMany({
+        where: {
+          createdBy: creatorId,
+          deleted: false,
+        },
+        select: {
+          id: true,
+          name: true,
+          address: true,
+          status: true,
+          monthlyRent: true,
+          nextDueDate: true,
+          dueDay: true,
+        },
+      }),
+      this.prisma.contract.findMany({
+        where: {
+          deleted: false,
+          property: {
+            createdBy: creatorId,
+          },
+        },
+        include: {
+          property: {
+            select: {
+              id: true,
+              name: true,
+              address: true,
+              status: true,
+              nextDueDate: true,
+            },
+          },
+          tenantUser: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
+        },
+      }),
+      this.prisma.payment.findMany({
+        where: {
+          property: {
+            createdBy: creatorId,
+          },
+          dataPagamento: {
+            gte: firstDayOfMonth,
+          },
+        },
+        select: {
+          valorPago: true,
+        },
+      }),
+      this.prisma.payment.findMany({
+        where: {
+          property: {
+            createdBy: creatorId,
+          },
+          dataPagamento: {
+            gte: thirtyDaysAgo,
+          },
+        },
+        orderBy: {
+          dataPagamento: 'desc',
+        },
+        take: 10,
+        include: {
+          property: {
+            select: {
+              id: true,
+              name: true,
+              address: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    const pendingContracts = contracts.filter((contract: any) => {
+      if (contract.status !== 'ATIVO') return false;
+      if (!contract.lastPaymentDate) return true;
+      return contract.lastPaymentDate < thirtyDaysAgo;
+    });
+
+    return this.buildDashboardResponse(properties, contracts, paymentsThisMonth, pendingContracts, recentPayments);
+  }
+
   async getOwnerDashboard(userId: string) {
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -702,6 +805,9 @@ export class DashboardService {
       // no extra filter - sees all
     } else if (role === 'ADMIN') {
       // ADMIN sees only properties they created
+      whereClause.createdBy = BigInt(userId);
+    } else if (role === 'INDEPENDENT_OWNER') {
+      // INDEPENDENT_OWNER sees only properties they created
       whereClause.createdBy = BigInt(userId);
     } else if (role === 'AGENCY_ADMIN') {
       if (!userAgencyId) {

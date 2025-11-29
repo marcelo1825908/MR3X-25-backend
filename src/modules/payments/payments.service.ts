@@ -41,10 +41,10 @@ export class PaymentsService {
           ownerId: BigInt(userId),
         };
       }
-      // INDEPENDENT_OWNER can only see payments for their properties
+      // INDEPENDENT_OWNER can only see payments for properties they created
       else if (role === 'INDEPENDENT_OWNER') {
         where.property = {
-          ownerId: BigInt(userId),
+          createdBy: BigInt(userId),
         };
       }
       // INQUILINO can only see their own payments
@@ -188,8 +188,17 @@ export class PaymentsService {
     }
 
     // Check access permissions
-    if (role === 'PROPRIETARIO' || role === 'INDEPENDENT_OWNER' || role === 'GESTOR') {
+    if (role === 'PROPRIETARIO' || role === 'GESTOR') {
       if (payment.property?.ownerId?.toString() !== userId) {
+        throw new ForbiddenException('Access denied');
+      }
+    } else if (role === 'INDEPENDENT_OWNER') {
+      // INDEPENDENT_OWNER checks by createdBy field
+      const property = await this.prisma.property.findUnique({
+        where: { id: payment.propertyId },
+        select: { createdBy: true },
+      });
+      if (property?.createdBy?.toString() !== userId) {
         throw new ForbiddenException('Access denied');
       }
     } else if (role === 'INQUILINO') {
@@ -428,9 +437,15 @@ export class PaymentsService {
         };
       }
       // PROPRIETARIO can only see payments for their properties
-      else if (role === 'PROPRIETARIO' || role === 'INDEPENDENT_OWNER' || role === 'GESTOR') {
+      else if (role === 'PROPRIETARIO' || role === 'GESTOR') {
         where.property = {
           ownerId: BigInt(userId),
+        };
+      }
+      // INDEPENDENT_OWNER can only see payments for properties they created
+      else if (role === 'INDEPENDENT_OWNER') {
+        where.property = {
+          createdBy: BigInt(userId),
         };
       }
       // INQUILINO can only see their own payments

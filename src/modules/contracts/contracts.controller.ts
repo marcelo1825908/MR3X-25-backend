@@ -20,13 +20,32 @@ export class ContractsController {
     @Query('status') status?: string,
     @CurrentUser() user?: any,
   ) {
-    // ADMIN sees only contracts for properties they created (each admin is independent)
-    // CEO sees all contracts
+    // Data isolation based on role:
+    // - CEO: sees ALL contracts
+    // - ADMIN: sees only contracts for properties they created
+    // - INDEPENDENT_OWNER: sees only contracts for properties they created
+    // - Agency roles: sees only contracts for their agency's properties
+
     let createdById: string | undefined;
-    if (user?.role === 'ADMIN') {
+    let effectiveAgencyId: string | undefined = agencyId;
+
+    if (user?.role === 'CEO') {
+      // CEO sees all - no filtering
+    } else if (user?.role === 'ADMIN') {
+      // ADMIN sees only contracts for properties they created
       createdById = user.sub;
+    } else if (user?.role === 'INDEPENDENT_OWNER') {
+      // INDEPENDENT_OWNER sees only their own contracts
+      createdById = user.sub;
+    } else if (user?.agencyId) {
+      // Agency users see only their agency's contracts
+      effectiveAgencyId = user.agencyId;
+    } else {
+      // For any other role without agency, only show their own created contracts
+      createdById = user?.sub;
     }
-    return this.contractsService.findAll({ skip, take, agencyId, status, createdById });
+
+    return this.contractsService.findAll({ skip, take, agencyId: effectiveAgencyId, status, createdById });
   }
 
   @Get(':id')
