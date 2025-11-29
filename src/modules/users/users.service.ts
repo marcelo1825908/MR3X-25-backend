@@ -10,8 +10,20 @@ import { UserRole } from '@prisma/client';
  * Role Creation Hierarchy - Who can create which roles
  * Based on MR3X Complete Hierarchy Requirements:
  *
+ * IMPORTANT: Two types of Managers exist:
+ * 1. PLATFORM_MANAGER - MR3X Internal Manager (created by ADMIN)
+ *    - Works for MR3X internally
+ *    - Handles support, statistics, client assistance
+ *    - Has ZERO access to agency operations
+ *
+ * 2. AGENCY_MANAGER - Agency Manager/Gestor (created by AGENCY_ADMIN)
+ *    - Works inside a real estate agency
+ *    - Controls agency team, creates brokers, owners, contracts, properties
+ *    - Has legal representation permissions for the agency
+ *
  * CEO -> ADMIN only
- * ADMIN -> AGENCY_MANAGER (MR3X), LEGAL_AUDITOR, REPRESENTATIVE, API_CLIENT
+ * ADMIN -> PLATFORM_MANAGER, LEGAL_AUDITOR, REPRESENTATIVE, API_CLIENT (NO AGENCY_MANAGER!)
+ * PLATFORM_MANAGER -> NONE (support role only)
  * AGENCY_ADMIN -> AGENCY_MANAGER, BROKER, PROPRIETARIO
  * AGENCY_MANAGER -> BROKER, PROPRIETARIO
  * BROKER -> NONE (cannot create users)
@@ -25,7 +37,8 @@ import { UserRole } from '@prisma/client';
  */
 const ROLE_CREATION_ALLOWED: Record<UserRole, UserRole[]> = {
   [UserRole.CEO]: [UserRole.ADMIN],
-  [UserRole.ADMIN]: [UserRole.AGENCY_MANAGER, UserRole.LEGAL_AUDITOR, UserRole.REPRESENTATIVE, UserRole.API_CLIENT],
+  [UserRole.ADMIN]: [UserRole.PLATFORM_MANAGER, UserRole.LEGAL_AUDITOR, UserRole.REPRESENTATIVE, UserRole.API_CLIENT],
+  [UserRole.PLATFORM_MANAGER]: [], // MR3X Internal Manager - support only, cannot create users
   [UserRole.AGENCY_ADMIN]: [UserRole.AGENCY_MANAGER, UserRole.BROKER, UserRole.PROPRIETARIO],
   [UserRole.AGENCY_MANAGER]: [UserRole.BROKER, UserRole.PROPRIETARIO],
   [UserRole.BROKER]: [], // Cannot create users
@@ -64,6 +77,18 @@ export class UsersService {
    */
   getAllowedRolesToCreate(creatorRole: UserRole): UserRole[] {
     return ROLE_CREATION_ALLOWED[creatorRole] || [];
+  }
+
+  /**
+   * Generates a random password with 8 characters
+   */
+  private generateRandomPassword(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let password = '';
+    for (let i = 0; i < 8; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return password;
   }
 
   async findAll(params: {
@@ -196,7 +221,11 @@ export class UsersService {
       throw new ConflictException('Email already registered');
     }
 
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    // Generate a random password if not provided or if empty
+    const plainPassword = dto.password && dto.password.length >= 6
+      ? dto.password
+      : this.generateRandomPassword();
+    const hashedPassword = await bcrypt.hash(plainPassword, 10);
 
     // For BROKER role, get the agencyId from the creator (manager)
     let finalAgencyId: bigint | null = dto.agencyId ? BigInt(dto.agencyId) : null;
@@ -220,7 +249,7 @@ export class UsersService {
       data: {
         email: dto.email,
         password: hashedPassword,
-        plainPassword: dto.password,
+        plainPassword: plainPassword,
         name: dto.name,
         role: dto.role,
         plan: dto.plan || 'FREE',

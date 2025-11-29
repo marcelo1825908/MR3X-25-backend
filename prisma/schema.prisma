@@ -13,8 +13,9 @@ datasource db {
 enum UserRole {
   CEO // MR3X Platform Administrator
   ADMIN // MR3X Admin
+  PLATFORM_MANAGER // MR3X Internal Manager (support, statistics, client assistance - NO agency operations)
   AGENCY_ADMIN // Agency Director/Supervisor-General (manages all managers)
-  AGENCY_MANAGER // Real Estate Agency Manager (manages brokers)
+  AGENCY_MANAGER // Real Estate Agency Manager (manages brokers, properties, contracts - INSIDE agency)
   BROKER // Broker/Agent (manages properties and owners)
   PROPRIETARIO // Property Owner (linked to agency)
   INDEPENDENT_OWNER // Independent Owner (without agency, full admin features)
