@@ -20,6 +20,9 @@ import { SettingsModule } from './modules/settings/settings.module';
 import { PlansModule } from './modules/plans/plans.module';
 import { ContractTemplatesModule } from './modules/contract-templates/contract-templates.module';
 import { TenantAnalysisModule } from './modules/tenant-analysis/tenant-analysis.module';
+import { InspectionsModule } from './modules/inspections/inspections.module';
+import { AgreementsModule } from './modules/agreements/agreements.module';
+import { InvoicesModule } from './modules/invoices/invoices.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -48,6 +51,9 @@ import { HealthController } from './health.controller';
     PlansModule,
     ContractTemplatesModule,
     TenantAnalysisModule,
+    InspectionsModule,
+    AgreementsModule,
+    InvoicesModule,
   ],
   controllers: [HealthController],
 })

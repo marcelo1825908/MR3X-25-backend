@@ -93,6 +93,7 @@ model Agency {
   contracts     Contract[]
   payments      Payment[]
   notifications Notification[]
+  invoices      Invoice[]
 
   @@map("agencies")
 }
@@ -166,7 +167,22 @@ model User {
   chatsAsParticipant2 Chat[]       @relation("ChatParticipant2")
   activeChats         ActiveChat[]
 
-  inspections Inspection[]
+  // Inspection relations
+  inspectionsAsInspector   Inspection[] @relation("InspectionInspector")
+  inspectionsAssigned      Inspection[] @relation("InspectionAssignedBy")
+  inspectionsApproved      Inspection[] @relation("InspectionApprovedBy")
+  inspectionsCreated       Inspection[] @relation("InspectionCreatedBy")
+
+  // Agreement relations
+  agreementsAsTenant       Agreement[] @relation("AgreementTenant")
+  agreementsAsOwner        Agreement[] @relation("AgreementOwner")
+  agreementsApproved       Agreement[] @relation("AgreementApprovedBy")
+  agreementsCreated        Agreement[] @relation("AgreementCreatedBy")
+
+  // Invoice relations
+  invoicesAsTenant         Invoice[] @relation("InvoiceTenant")
+  invoicesAsOwner          Invoice[] @relation("InvoiceOwner")
+  invoicesCreated          Invoice[] @relation("InvoiceCreator")
 
   auditLogs AuditLog[]
 
@@ -268,6 +284,8 @@ model Property {
   expenses      Expense[]
   inspections   Inspection[]
   images        PropertyImage[]
+  agreements    Agreement[]
+  invoices      Invoice[]
 
   @@map("properties")
 }
@@ -295,6 +313,23 @@ model Contract {
   templateType    String?   @map("template_type") @db.VarChar(10) // CTR, ACD, VST
   clientIP        String?   @map("client_ip") @db.VarChar(45) // IPv4 or IPv6 address
   userAgent       String?   @map("user_agent") @db.VarChar(500) // Browser/Client user agent
+  // Signature fields
+  tenantSignature     String?   @map("tenant_signature") @db.Text // Base64 signature image
+  tenantSignedAt      DateTime? @map("tenant_signed_at") @db.Timestamp(0)
+  tenantSignedIP      String?   @map("tenant_signed_ip") @db.VarChar(45)
+  tenantSignedAgent   String?   @map("tenant_signed_agent") @db.VarChar(500)
+  ownerSignature      String?   @map("owner_signature") @db.Text
+  ownerSignedAt       DateTime? @map("owner_signed_at") @db.Timestamp(0)
+  ownerSignedIP       String?   @map("owner_signed_ip") @db.VarChar(45)
+  ownerSignedAgent    String?   @map("owner_signed_agent") @db.VarChar(500)
+  agencySignature     String?   @map("agency_signature") @db.Text
+  agencySignedAt      DateTime? @map("agency_signed_at") @db.Timestamp(0)
+  agencySignedIP      String?   @map("agency_signed_ip") @db.VarChar(45)
+  agencySignedAgent   String?   @map("agency_signed_agent") @db.VarChar(500)
+  witnessSignature    String?   @map("witness_signature") @db.Text
+  witnessSignedAt     DateTime? @map("witness_signed_at") @db.Timestamp(0)
+  witnessName         String?   @map("witness_name") @db.VarChar(100)
+  witnessDocument     String?   @map("witness_document") @db.VarChar(30)
   deleted         Boolean   @default(false)
   deletedAt       DateTime? @map("deleted_at") @db.DateTime(0)
   deletedBy       BigInt?   @map("deleted_by") @db.UnsignedBigInt
@@ -310,6 +345,7 @@ model Contract {
   payments Payment[]
   audits   ContractAudit[]
   invoices Invoice[]
+  agreements Agreement[]
 
   @@map("contracts")
 }
@@ -472,22 +508,81 @@ model Company {
 model Invoice {
   id            BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
   contractId    BigInt   @map("contract_id") @db.UnsignedBigInt
+  propertyId    BigInt?  @map("property_id") @db.UnsignedBigInt
+  agencyId      BigInt?  @map("agency_id") @db.UnsignedBigInt
+  tenantId      BigInt?  @map("tenant_id") @db.UnsignedBigInt
+  ownerId       BigInt?  @map("owner_id") @db.UnsignedBigInt
+
+  // Invoice identification
+  invoiceNumber String?  @unique @map("invoice_number") @db.VarChar(50)
+  referenceMonth String? @map("reference_month") @db.VarChar(7) // YYYY-MM format
+  description   String?  @db.VarChar(500)
+  type          String   @default("RENT") @db.VarChar(30) // RENT, CONDOMINIUM, EXTRA, FINE, PENALTY, OTHER
+
+  // Financial values
   dueDate       DateTime @map("due_date") @db.Date
   originalValue Decimal  @map("original_value") @db.Decimal(12, 2)
   fine          Decimal? @db.Decimal(12, 2)
   interest      Decimal? @db.Decimal(12, 2)
   discount      Decimal? @db.Decimal(12, 2)
   updatedValue  Decimal  @map("updated_value") @db.Decimal(12, 2)
-  status        String   @db.VarChar(20) // generated/pending/paid/late
-  paymentMethod String?  @map("payment_method") @db.VarChar(50)
+  paidValue     Decimal? @map("paid_value") @db.Decimal(12, 2)
+  paidAt        DateTime? @map("paid_at") @db.Timestamp(0)
+
+  // Status and payment info
+  status        String   @default("PENDING") @db.VarChar(20) // PENDING, PAID, OVERDUE, CANCELED, REFUNDED
+  paymentMethod String?  @map("payment_method") @db.VarChar(50) // PIX, BOLETO, CREDIT_CARD
+
+  // Asaas integration
+  asaasId       String?  @unique @map("asaas_id") @db.VarChar(100) // Asaas payment ID
+  asaasCustomerId String? @map("asaas_customer_id") @db.VarChar(100)
   paymentLink   String?  @map("payment_link") @db.VarChar(500)
+  boletoUrl     String?  @map("boleto_url") @db.VarChar(500)
+  pixQrCode     String?  @map("pix_qr_code") @db.Text
+  pixCopyPaste  String?  @map("pix_copy_paste") @db.Text
+  barcode       String?  @db.VarChar(100)
+  boletoDigitableLine String? @map("boleto_digitable_line") @db.VarChar(100)
+
+  // Split information (for agency/owner distribution)
+  ownerAmount   Decimal? @map("owner_amount") @db.Decimal(12, 2)
+  agencyAmount  Decimal? @map("agency_amount") @db.Decimal(12, 2)
+  platformFee   Decimal? @map("platform_fee") @db.Decimal(12, 2)
+  gatewayFee    Decimal? @map("gateway_fee") @db.Decimal(12, 2)
+
+  // Webhook and sync
   webhookStatus String?  @map("webhook_status") @db.VarChar(50)
+  lastWebhookAt DateTime? @map("last_webhook_at") @db.Timestamp(0)
+  syncedAt      DateTime? @map("synced_at") @db.Timestamp(0)
+
+  // Email/notification tracking
+  emailSentAt   DateTime? @map("email_sent_at") @db.Timestamp(0)
+  reminderSentAt DateTime? @map("reminder_sent_at") @db.Timestamp(0)
+
+  // Receipt
+  receiptUrl    String?  @map("receipt_url") @db.VarChar(500)
+
+  // Metadata
+  notes         String?  @db.Text
+  createdBy     BigInt?  @map("created_by") @db.UnsignedBigInt
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
 
   // Relations
   contract  Contract   @relation(fields: [contractId], references: [id])
+  property  Property?  @relation(fields: [propertyId], references: [id])
+  agency    Agency?    @relation(fields: [agencyId], references: [id])
+  tenant    User?      @relation("InvoiceTenant", fields: [tenantId], references: [id])
+  owner     User?      @relation("InvoiceOwner", fields: [ownerId], references: [id])
+  creator   User?      @relation("InvoiceCreator", fields: [createdBy], references: [id])
   transfers Transfer[]
 
+  @@index([contractId])
+  @@index([propertyId])
+  @@index([agencyId])
+  @@index([tenantId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([referenceMonth])
   @@map("invoices")
 }
 
@@ -544,20 +639,94 @@ model Expense {
 model Inspection {
   id           BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
   propertyId   BigInt   @map("property_id") @db.UnsignedBigInt
-  type         String   @db.VarChar(20) // entry/exit/periodic
+  contractId   BigInt?  @map("contract_id") @db.UnsignedBigInt
+  agencyId     BigInt?  @map("agency_id") @db.UnsignedBigInt
+  type         String   @db.VarChar(20) // ENTRY/EXIT/PERIODIC
   date         DateTime @db.Date
+  scheduledDate DateTime? @map("scheduled_date") @db.Date
   inspectorId  BigInt   @map("inspector_id") @db.UnsignedBigInt
-  photos       String?  @db.Text // JSON array of photo URLs
-  checklist    String?  @db.Text // JSON array of checklist items
+  assignedById BigInt?  @map("assigned_by_id") @db.UnsignedBigInt
+
+  // Inspection content
+  rooms        String?  @db.Text // JSON array of rooms with items
+  photos       String?  @db.Text // JSON array of photo URLs with metadata
+  notes        String?  @db.Text // General inspection notes
+
+  // Signatures
+  tenantSignature    String?   @map("tenant_signature") @db.Text // Base64 signature
+  tenantSignedAt     DateTime? @map("tenant_signed_at") @db.Timestamp(0)
+  ownerSignature     String?   @map("owner_signature") @db.Text
+  ownerSignedAt      DateTime? @map("owner_signed_at") @db.Timestamp(0)
+  agencySignature    String?   @map("agency_signature") @db.Text
+  agencySignedAt     DateTime? @map("agency_signed_at") @db.Timestamp(0)
+  inspectorSignature String?   @map("inspector_signature") @db.Text
+  inspectorSignedAt  DateTime? @map("inspector_signed_at") @db.Timestamp(0)
+
+  // Report
   pdfReportUrl String?  @map("pdf_report_url") @db.VarChar(500)
-  status       String   @default("pending") @db.VarChar(20) // pending/accepted/disputed
+  reportGeneratedAt DateTime? @map("report_generated_at") @db.Timestamp(0)
+
+  // Status and approval
+  status       String   @default("RASCUNHO") @db.VarChar(20) // RASCUNHO/EM_ANDAMENTO/AGUARDANDO_ASSINATURA/CONCLUIDA/APROVADA/REJEITADA
+  approvedById BigInt?  @map("approved_by_id") @db.UnsignedBigInt
+  approvedAt   DateTime? @map("approved_at") @db.Timestamp(0)
+  rejectionReason String? @map("rejection_reason") @db.Text
+
+  // Template reference
+  templateId   BigInt?  @map("template_id") @db.UnsignedBigInt
+
+  // Metadata
+  location     String?  @db.VarChar(255) // GPS coordinates or address
+  createdBy    BigInt?  @map("created_by") @db.UnsignedBigInt
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
 
   // Relations
   property  Property @relation(fields: [propertyId], references: [id])
-  inspector User     @relation(fields: [inspectorId], references: [id])
+  inspector User     @relation("InspectionInspector", fields: [inspectorId], references: [id])
+  assignedBy User?   @relation("InspectionAssignedBy", fields: [assignedById], references: [id])
+  approvedBy User?   @relation("InspectionApprovedBy", fields: [approvedById], references: [id])
+  createdByUser User? @relation("InspectionCreatedBy", fields: [createdBy], references: [id])
+  template  InspectionTemplate? @relation(fields: [templateId], references: [id])
+  items     InspectionItem[]
 
   @@map("inspections")
+}
+
+model InspectionTemplate {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  name        String   @db.VarChar(255)
+  description String?  @db.Text
+  type        String   @db.VarChar(20) // ENTRY/EXIT/PERIODIC
+  rooms       String   @db.Text // JSON array of room templates with items
+  agencyId    BigInt?  @map("agency_id") @db.UnsignedBigInt
+  createdBy   BigInt   @map("created_by") @db.UnsignedBigInt
+  isDefault   Boolean  @default(false) @map("is_default")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  inspections Inspection[]
+
+  @@map("inspection_templates")
+}
+
+model InspectionItem {
+  id           BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  inspectionId BigInt   @map("inspection_id") @db.UnsignedBigInt
+  room         String   @db.VarChar(100) // Room name (Sala, Quarto, Cozinha, etc.)
+  item         String   @db.VarChar(255) // Item name (Parede, Piso, Janela, etc.)
+  condition    String   @db.VarChar(20) // OK/DANIFICADO/AUSENTE/REPARAR
+  description  String?  @db.Text
+  photos       String?  @db.Text // JSON array of photo URLs for this item
+  needsRepair  Boolean  @default(false) @map("needs_repair")
+  repairCost   Decimal? @map("repair_cost") @db.Decimal(12, 2)
+  responsible  String?  @db.VarChar(20) // INQUILINO/PROPRIETARIO/AGENCIA
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+
+  inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@map("inspection_items")
 }
 
 model AuditLog {
@@ -595,6 +764,105 @@ model PropertyImage {
   uploader User     @relation("PropertyImageUploader", fields: [uploadedBy], references: [id])
 
   @@map("property_images")
+}
+
+/// Agreements (Acordos/Termos) - Negotiated documents between parties during rental lifecycle
+model Agreement {
+  id           BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  contractId   BigInt?  @map("contract_id") @db.UnsignedBigInt
+  propertyId   BigInt   @map("property_id") @db.UnsignedBigInt
+  agencyId     BigInt?  @map("agency_id") @db.UnsignedBigInt
+
+  // Agreement type and details
+  type         String   @db.VarChar(50) // PAYMENT_SETTLEMENT, DAMAGE_COMPENSATION, FINE_AGREEMENT, MOVE_OUT, CONTRACT_ADJUSTMENT, OTHER
+  title        String   @db.VarChar(255)
+  description  String?  @db.Text
+  content      String?  @db.Text // Full agreement text/terms
+  templateId   String?  @map("template_id") @db.VarChar(100) // Template identifier
+
+  // Parties involved
+  tenantId     BigInt?  @map("tenant_id") @db.UnsignedBigInt
+  ownerId      BigInt?  @map("owner_id") @db.UnsignedBigInt
+
+  // Financial terms (for payment/settlement agreements)
+  originalAmount    Decimal? @map("original_amount") @db.Decimal(12, 2)
+  negotiatedAmount  Decimal? @map("negotiated_amount") @db.Decimal(12, 2)
+  fineAmount        Decimal? @map("fine_amount") @db.Decimal(12, 2)
+  discountAmount    Decimal? @map("discount_amount") @db.Decimal(12, 2)
+  installments      Int?     @map("installments") // Number of installments
+  installmentValue  Decimal? @map("installment_value") @db.Decimal(12, 2)
+
+  // Dates
+  effectiveDate    DateTime? @map("effective_date") @db.Date // When agreement takes effect
+  expirationDate   DateTime? @map("expiration_date") @db.Date // Agreement validity end
+  newDueDate       DateTime? @map("new_due_date") @db.Date // New payment due date
+  moveOutDate      DateTime? @map("move_out_date") @db.Date // For move-out agreements
+
+  // Signatures
+  tenantSignature    String?   @map("tenant_signature") @db.Text // Base64 signature
+  tenantSignedAt     DateTime? @map("tenant_signed_at") @db.Timestamp(0)
+  ownerSignature     String?   @map("owner_signature") @db.Text
+  ownerSignedAt      DateTime? @map("owner_signed_at") @db.Timestamp(0)
+  agencySignature    String?   @map("agency_signature") @db.Text
+  agencySignedAt     DateTime? @map("agency_signed_at") @db.Timestamp(0)
+
+  // Status and workflow
+  status       String   @default("RASCUNHO") @db.VarChar(30) // RASCUNHO/AGUARDANDO_ASSINATURA/ASSINADO/CONCLUIDO/REJEITADO/CANCELADO
+
+  // Approval
+  approvedById BigInt?  @map("approved_by_id") @db.UnsignedBigInt
+  approvedAt   DateTime? @map("approved_at") @db.Timestamp(0)
+  rejectionReason String? @map("rejection_reason") @db.Text
+
+  // Payment integration (Asaas)
+  asaasPaymentId   String?   @map("asaas_payment_id") @db.VarChar(100)
+  asaasPaymentLink String?   @map("asaas_payment_link") @db.VarChar(500)
+  paymentStatus    String?   @map("payment_status") @db.VarChar(30)
+
+  // Attachments and documents
+  attachments  String?  @db.Text // JSON array of attachment URLs
+  pdfUrl       String?  @map("pdf_url") @db.VarChar(500)
+
+  // Token for verification
+  agreementToken String? @unique @map("agreement_token") @db.VarChar(100) // MR3X-AGR-2025-XXXXX format
+  agreementHash  String? @map("agreement_hash") @db.VarChar(255) // SHA-256 hash
+
+  // Client info for audit
+  clientIP     String?  @map("client_ip") @db.VarChar(45)
+  userAgent    String?  @map("user_agent") @db.VarChar(500)
+
+  // Metadata
+  notes        String?  @db.Text // Internal notes
+  createdBy    BigInt   @map("created_by") @db.UnsignedBigInt
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  // Relations
+  contract     Contract? @relation(fields: [contractId], references: [id])
+  property     Property  @relation(fields: [propertyId], references: [id])
+  tenant       User?     @relation("AgreementTenant", fields: [tenantId], references: [id])
+  owner        User?     @relation("AgreementOwner", fields: [ownerId], references: [id])
+  approvedBy   User?     @relation("AgreementApprovedBy", fields: [approvedById], references: [id])
+  createdByUser User     @relation("AgreementCreatedBy", fields: [createdBy], references: [id])
+
+  @@map("agreements")
+}
+
+/// Agreement templates for quick creation
+model AgreementTemplate {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  name        String   @db.VarChar(255)
+  description String?  @db.Text
+  type        String   @db.VarChar(50) // PAYMENT_SETTLEMENT, DAMAGE_COMPENSATION, FINE_AGREEMENT, MOVE_OUT, CONTRACT_ADJUSTMENT, OTHER
+  content     String   @db.Text // Template content with placeholders
+  agencyId    BigInt?  @map("agency_id") @db.UnsignedBigInt
+  createdBy   BigInt   @map("created_by") @db.UnsignedBigInt
+  isDefault   Boolean  @default(false) @map("is_default")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  @@map("agreement_templates")
 }
 
 /// Plan modification requests from ADMIN users that require CEO approval

@@ -461,21 +461,33 @@ export class PaymentsService {
         where.id = BigInt(-1); // This will return no results
       }
 
+      // Use parallel queries for better performance
+      const [aggregateResult, totalCount] = await Promise.all([
+        // Get total sum
+        this.prisma.payment.aggregate({
+          where,
+          _sum: {
+            valorPago: true,
+          },
+        }),
+        // Get count
+        this.prisma.payment.count({ where }),
+      ]);
+
+      // Get payments only with necessary fields for monthly grouping
+      // Limit to essential data to reduce memory and transfer time
       const payments = await this.prisma.payment.findMany({
         where,
-        include: {
-          property: {
-            select: {
-              id: true,
-              name: true,
-              address: true,
-            },
-          },
+        select: {
+          id: true,
+          dataPagamento: true,
+          valorPago: true,
+          tipo: true,
         },
         orderBy: { dataPagamento: 'asc' },
       });
 
-      // Group by month
+      // Group by month in memory (faster than multiple DB queries)
       const monthlyData = Array.from({ length: 12 }, (_, i) => ({
         month: i + 1,
         monthName: new Date(targetYear, i, 1).toLocaleDateString('pt-BR', { month: 'long' }),
@@ -491,35 +503,27 @@ export class PaymentsService {
 
       payments.forEach(payment => {
         const month = new Date(payment.dataPagamento).getMonth();
-        monthlyData[month].total += Number(payment.valorPago) || 0;
+        const valor = Number(payment.valorPago) || 0;
+        monthlyData[month].total += valor;
         monthlyData[month].count += 1;
         const paymentType = payment.tipo as string;
         if (monthlyData[month].byType[paymentType] !== undefined) {
-          monthlyData[month].byType[paymentType] += Number(payment.valorPago) || 0;
+          monthlyData[month].byType[paymentType] += valor;
         } else {
-          monthlyData[month].byType.OUTROS += Number(payment.valorPago) || 0;
+          monthlyData[month].byType.OUTROS += valor;
         }
       });
 
-      const totalYear = payments.reduce((sum, p) => sum + (Number(p.valorPago) || 0), 0);
+      const totalYear = Number(aggregateResult._sum.valorPago) || 0;
 
       return {
         year: targetYear,
         total: totalYear,
-        totalPayments: payments.length,
+        totalPayments: totalCount,
         monthly: monthlyData,
-        payments: payments.map(p => ({
-          ...p,
-          id: p.id.toString(),
-          propertyId: p.propertyId?.toString(),
-          contractId: p.contratoId?.toString(),
-          userId: p.userId?.toString(),
-          agencyId: p.agencyId?.toString() || null,
-          property: p.property ? {
-            ...p.property,
-            id: p.property.id.toString(),
-          } : null,
-        })),
+        // Don't return all payments - only return summary data for chart
+        // This significantly reduces response size and improves performance
+        payments: [],
       };
     } catch (error: any) {
       console.error('Error in getAnnualReport service:', error);
