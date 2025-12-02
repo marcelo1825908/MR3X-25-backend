@@ -195,6 +195,12 @@ model User {
   planModificationRequests PlanModificationRequest[] @relation("PlanModificationRequester")
   planModificationReviews  PlanModificationRequest[] @relation("PlanModificationReviewer")
 
+  // Sales inbox relations
+  sentSalesMessages     SalesMessage[]      @relation("SalesMessageSender")
+  receivedSalesMessages SalesMessage[]      @relation("SalesMessageRecipient")
+  salesMessageReplies   SalesMessageReply[] @relation("SalesMessageReplySender")
+  salesNotifications    SalesNotification[] @relation("SalesNotificationUser")
+
   @@map("users")
 }
 
@@ -863,6 +869,64 @@ model AgreementTemplate {
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
 
   @@map("agreement_templates")
+}
+
+/// Sales Representative Inbox Messages
+model SalesMessage {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  senderId    BigInt   @map("sender_id") @db.UnsignedBigInt
+  recipientId BigInt   @map("recipient_id") @db.UnsignedBigInt
+  subject     String   @db.VarChar(255)
+  content     String   @db.Text
+  isRead      Boolean  @default(false) @map("is_read")
+  isStarred   Boolean  @default(false) @map("is_starred")
+  isDeleted   Boolean  @default(false) @map("is_deleted")
+  readAt      DateTime? @map("read_at") @db.Timestamp(0)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  // Relations
+  sender    User @relation("SalesMessageSender", fields: [senderId], references: [id])
+  recipient User @relation("SalesMessageRecipient", fields: [recipientId], references: [id])
+  replies   SalesMessageReply[]
+
+  @@index([recipientId])
+  @@index([senderId])
+  @@map("sales_messages")
+}
+
+/// Sales Message Replies (conversation thread)
+model SalesMessageReply {
+  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  messageId BigInt   @map("message_id") @db.UnsignedBigInt
+  senderId  BigInt   @map("sender_id") @db.UnsignedBigInt
+  content   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+
+  // Relations
+  message SalesMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  sender  User         @relation("SalesMessageReplySender", fields: [senderId], references: [id])
+
+  @@index([messageId])
+  @@map("sales_message_replies")
+}
+
+/// Sales Representative Notifications
+model SalesNotification {
+  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  userId    BigInt   @map("user_id") @db.UnsignedBigInt
+  type      String   @db.VarChar(50) // lead, proposal, commission, system
+  title     String   @db.VarChar(255)
+  message   String   @db.Text
+  link      String?  @db.VarChar(255)
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+
+  // Relations
+  user User @relation("SalesNotificationUser", fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("sales_notifications")
 }
 
 /// Plan modification requests from ADMIN users that require CEO approval

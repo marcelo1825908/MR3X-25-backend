@@ -14,11 +14,13 @@ import {
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { SalesMessageService } from './sales-message.service';
 
 @Controller('sales-rep')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('REPRESENTATIVE')
 export class SalesRepController {
+  constructor(private readonly salesMessageService: SalesMessageService) {}
   // ==================== STATS ====================
   @Get('stats')
   async getStats(@Request() req: any) {
@@ -416,103 +418,66 @@ export class SalesRepController {
   // ==================== MESSAGES ====================
   @Get('messages')
   async getMessages(@Request() req: any) {
-    return [
-      {
-        id: '1',
-        senderId: 'admin1',
-        senderName: 'Carlos Admin',
-        senderRole: 'ADMIN',
-        recipientId: req.user.sub,
-        subject: 'Parabéns pela venda!',
-        content: 'Olá! Parabéns pela conversão do cliente Realty Plus. Excelente trabalho! Continue assim.',
-        isRead: true,
-        isStarred: true,
-        createdAt: new Date(Date.now() - 86400000).toISOString(),
-        readAt: new Date(Date.now() - 82800000).toISOString(),
-      },
-      {
-        id: '2',
-        senderId: 'manager1',
-        senderName: 'Ana Manager',
-        senderRole: 'PLATFORM_MANAGER',
-        recipientId: req.user.sub,
-        subject: 'Novo lead qualificado',
-        content: 'Temos um novo lead muito promissor: Invest Imóveis. Já fiz o primeiro contato e eles estão interessados no plano Enterprise. Pode dar seguimento?',
-        isRead: false,
-        isStarred: false,
-        createdAt: new Date().toISOString(),
-        readAt: null,
-      },
-    ];
+    const userId = BigInt(req.user.sub);
+    return this.salesMessageService.getMessages(userId);
   }
 
   @Post('messages')
   async createMessage(@Request() req: any, @Body() body: any) {
-    return {
-      id: Math.random().toString(36).substring(7),
-      senderId: req.user.sub,
-      senderName: req.user.name || 'Representante',
-      senderRole: 'REPRESENTATIVE',
-      ...body,
-      isRead: false,
-      isStarred: false,
-      createdAt: new Date().toISOString(),
-      readAt: null,
-    };
+    const senderId = BigInt(req.user.sub);
+    const recipientId = BigInt(body.recipientId);
+    return this.salesMessageService.createMessage(
+      senderId,
+      recipientId,
+      body.subject,
+      body.content,
+    );
   }
 
   @Patch('messages/:id/read')
-  async markMessageAsRead(@Param('id') id: string) {
-    return { id, isRead: true, readAt: new Date().toISOString() };
+  async markMessageAsRead(@Request() req: any, @Param('id') id: string) {
+    const messageId = BigInt(id);
+    const userId = BigInt(req.user.sub);
+    return this.salesMessageService.markAsRead(messageId, userId);
   }
 
   @Patch('messages/:id/star')
-  async toggleMessageStar(@Param('id') id: string) {
-    return { id, isStarred: true }; // In real implementation, toggle the current state
+  async toggleMessageStar(@Request() req: any, @Param('id') id: string) {
+    const messageId = BigInt(id);
+    const userId = BigInt(req.user.sub);
+    return this.salesMessageService.toggleStar(messageId, userId);
   }
 
   @Delete('messages/:id')
-  async deleteMessage(@Param('id') id: string) {
-    return { success: true, message: 'Message deleted successfully' };
+  async deleteMessage(@Request() req: any, @Param('id') id: string) {
+    const messageId = BigInt(id);
+    const userId = BigInt(req.user.sub);
+    return this.salesMessageService.deleteMessage(messageId, userId);
+  }
+
+  @Post('messages/:id/reply')
+  async replyToMessage(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
+    const messageId = BigInt(id);
+    const senderId = BigInt(req.user.sub);
+    return this.salesMessageService.replyToMessage(messageId, senderId, body.content);
   }
 
   // ==================== NOTIFICATIONS ====================
   @Get('notifications')
   async getNotifications(@Request() req: any) {
-    return [
-      {
-        id: '1',
-        type: 'lead',
-        title: 'Novo lead atribuído',
-        message: 'Um novo prospect foi atribuído a você: Urban Imóveis',
-        isRead: false,
-        createdAt: new Date().toISOString(),
-        link: '/dashboard/sales-prospects',
-      },
-      {
-        id: '2',
-        type: 'proposal',
-        title: 'Proposta visualizada',
-        message: 'Imobiliária Centro visualizou sua proposta',
-        isRead: false,
-        createdAt: new Date(Date.now() - 1800000).toISOString(),
-        link: '/dashboard/sales-proposals',
-      },
-      {
-        id: '3',
-        type: 'commission',
-        title: 'Comissão processada',
-        message: 'Sua comissão de R$ 1.530,00 foi processada e será paga em 30/12',
-        isRead: true,
-        createdAt: new Date(Date.now() - 86400000).toISOString(),
-        link: '/dashboard/sales-commissions',
-      },
-    ];
+    const userId = BigInt(req.user.sub);
+    return this.salesMessageService.getNotifications(userId);
   }
 
   @Patch('notifications/:id/read')
-  async markNotificationAsRead(@Param('id') id: string) {
-    return { id, isRead: true };
+  async markNotificationAsRead(@Request() req: any, @Param('id') id: string) {
+    const notificationId = BigInt(id);
+    const userId = BigInt(req.user.sub);
+    return this.salesMessageService.markNotificationAsRead(notificationId, userId);
   }
 
   @Put('notifications/read-all')
