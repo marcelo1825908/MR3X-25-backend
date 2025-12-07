@@ -283,11 +283,11 @@ export class ContractsController {
     @Param('id') id: string,
     @Res() res: Response,
   ) {
-    const result = await this.contractsService.getProvisionalPdf(id);
+    const pdfBuffer = await this.contractsService.getProvisionalPdf(id);
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="contract-provisional-${result.token}.pdf"`);
-    res.send(result.buffer);
+    res.setHeader('Content-Disposition', `inline; filename="contract-provisional-${id}.pdf"`);
+    res.send(pdfBuffer);
   }
 
   /**
@@ -300,11 +300,11 @@ export class ContractsController {
     @Param('id') id: string,
     @Res() res: Response,
   ) {
-    const result = await this.contractsService.getFinalPdf(id);
+    const pdfBuffer = await this.contractsService.getFinalPdf(id);
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="contract-final-${result.token}.pdf"`);
-    res.send(result.buffer);
+    res.setHeader('Content-Disposition', `inline; filename="contract-final-${id}.pdf"`);
+    res.send(pdfBuffer);
   }
 
   /**
@@ -389,7 +389,7 @@ export class ContractsController {
           name: body.signerName,
         },
       ],
-      body.expiresInHours || 48,
+      userId,
     );
 
     return {

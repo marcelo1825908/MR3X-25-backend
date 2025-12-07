@@ -261,7 +261,7 @@ export class ContractPdfService {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'networkidle0' });
 
-      const pdfBuffer = await page.pdf({
+      const pdfUint8Array = await page.pdf({
         format: 'A4',
         printBackground: true,
         margin: {
@@ -271,6 +271,9 @@ export class ContractPdfService {
           left: '15mm',
         },
       });
+
+      // Convert Uint8Array to Buffer
+      const pdfBuffer = Buffer.from(pdfUint8Array);
 
       // Save provisional PDF
       const timestamp = Date.now();
@@ -313,7 +316,7 @@ export class ContractPdfService {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'networkidle0' });
 
-      const pdfBuffer = await page.pdf({
+      const pdfUint8Array = await page.pdf({
         format: 'A4',
         printBackground: true,
         margin: {
@@ -323,6 +326,9 @@ export class ContractPdfService {
           left: '15mm',
         },
       });
+
+      // Convert Uint8Array to Buffer
+      const pdfBuffer = Buffer.from(pdfUint8Array);
 
       // Save final PDF
       const timestamp = Date.now();

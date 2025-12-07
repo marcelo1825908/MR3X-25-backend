@@ -277,5 +277,5 @@ export const AGENCY_REPRESENTATIVE_ROLES = [
  * Check if a role can act on behalf of owners in an agency
  */
 export function canActOnBehalfOfOwner(role: UserRole): boolean {
-  return AGENCY_REPRESENTATIVE_ROLES.includes(role);
+  return (AGENCY_REPRESENTATIVE_ROLES as readonly UserRole[]).includes(role);
 }
