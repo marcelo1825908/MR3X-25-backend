@@ -45,14 +45,14 @@ export const PROPRIETARIO_PERMISSIONS: Record<string, ModulePermission> = {
   dashboard: {
     accessLevel: OwnerAccessLevel.VIEW_ONLY,
     allowedActions: [OwnerAction.VIEW],
-    message: 'Proprietário pode visualizar o dashboard de suas propriedades',
+    message: 'Proprietário pode visualizar o dashboard de seus imóveis',
   },
 
   // Properties - can view their properties
   properties: {
     accessLevel: OwnerAccessLevel.VIEW_ONLY,
     allowedActions: [OwnerAction.VIEW],
-    message: 'Proprietário pode visualizar suas propriedades, mas alterações são feitas pela imobiliária',
+    message: 'Proprietário pode visualizar seus imóveis, mas alterações são feitas pela imobiliária',
   },
 
   // Tenant Analysis - READ ONLY
@@ -108,14 +108,14 @@ export const PROPRIETARIO_PERMISSIONS: Record<string, ModulePermission> = {
   reports: {
     accessLevel: OwnerAccessLevel.VIEW_ONLY,
     allowedActions: [OwnerAction.VIEW, OwnerAction.EXPORT],
-    message: 'Proprietário pode visualizar e exportar relatórios de suas propriedades',
+    message: 'Proprietário pode visualizar e exportar relatórios de seus imóveis',
   },
 
   // Notifications - can view
   notifications: {
     accessLevel: OwnerAccessLevel.VIEW_ONLY,
     allowedActions: [OwnerAction.VIEW],
-    message: 'Proprietário recebe notificações sobre suas propriedades',
+    message: 'Proprietário recebe notificações sobre seus imóveis',
   },
 
   // Chat - can communicate with agency
@@ -136,7 +136,7 @@ export const PROPRIETARIO_PERMISSIONS: Record<string, ModulePermission> = {
   documents: {
     accessLevel: OwnerAccessLevel.VIEW_ONLY,
     allowedActions: [OwnerAction.VIEW, OwnerAction.EXPORT],
-    message: 'Proprietário pode visualizar documentos de suas propriedades',
+    message: 'Proprietário pode visualizar documentos de seus imóveis',
   },
 };
 

@@ -5,18 +5,18 @@ import { UserRole } from '@prisma/client';
 
 // Message templates in Portuguese
 export const PLAN_MESSAGES = {
-  PROPERTY_FROZEN: 'Esta propriedade está congelada. Seu plano atual permite apenas {limit} propriedade(s) ativa(s). Faça upgrade para desbloquear.',
+  PROPERTY_FROZEN: 'Este imóvel está congelado. Seu plano atual permite apenas {limit} imóvel(eis) ativo(s). Faça upgrade para desbloquear.',
   USER_FROZEN: 'Este usuário está desativado devido ao limite do plano. Faça upgrade para reativar.',
-  CREATE_PROPERTY_BLOCKED: 'Você atingiu o limite de {limit} propriedade(s) do seu plano {plan}. Faça upgrade para adicionar mais propriedades.',
+  CREATE_PROPERTY_BLOCKED: 'Você atingiu o limite de {limit} imóvel(eis) do seu plano {plan}. Faça upgrade para adicionar mais imóveis.',
   CREATE_USER_BLOCKED: 'Você atingiu o limite de {limit} usuário(s) do seu plano {plan}. Faça upgrade para adicionar mais usuários.',
-  CONTRACT_ON_FROZEN_PROPERTY: 'Não é possível criar contratos para propriedades congeladas. Faça upgrade ou ative esta propriedade primeiro.',
-  PAYMENT_ON_FROZEN_PROPERTY: 'Não é possível registrar pagamentos para propriedades congeladas.',
-  INSPECTION_ON_FROZEN_PROPERTY: 'Não é possível registrar inspeções para propriedades congeladas.',
-  EDIT_FROZEN_PROPERTY: 'Esta propriedade está congelada e não pode ser editada. Faça upgrade do seu plano.',
+  CONTRACT_ON_FROZEN_PROPERTY: 'Não é possível criar contratos para imóveis congelados. Faça upgrade ou ative este imóvel primeiro.',
+  PAYMENT_ON_FROZEN_PROPERTY: 'Não é possível registrar pagamentos para imóveis congelados.',
+  INSPECTION_ON_FROZEN_PROPERTY: 'Não é possível registrar inspeções para imóveis congelados.',
+  EDIT_FROZEN_PROPERTY: 'Este imóvel está congelado e não pode ser editado. Faça upgrade do seu plano.',
   EDIT_FROZEN_USER: 'Este usuário está congelado e não pode ser editado. Faça upgrade do seu plano.',
-  UPGRADE_SUCCESS: 'Upgrade realizado com sucesso! Todas as suas propriedades e usuários foram desbloqueados.',
-  DOWNGRADE_WARNING: 'Ao fazer downgrade para o plano {plan}, {freezeCount} propriedade(s) e {userFreezeCount} usuário(s) serão congelados.',
-  SWITCH_ACTIVE_SUCCESS: 'Propriedade ativa alterada com sucesso.',
+  UPGRADE_SUCCESS: 'Upgrade realizado com sucesso! Todos os seus imóveis e usuários foram desbloqueados.',
+  DOWNGRADE_WARNING: 'Ao fazer downgrade para o plano {plan}, {freezeCount} imóvel(eis) e {userFreezeCount} usuário(s) serão congelados.',
+  SWITCH_ACTIVE_SUCCESS: 'Imóvel ativo alterado com sucesso.',
   LOGIN_BLOCKED_FROZEN: 'Sua conta está temporariamente desativada devido ao limite do plano. Entre em contato com o administrador da agência.',
   API_DISABLED: 'Acesso à API não está disponível no plano FREE. Faça upgrade para habilitar.',
 };
@@ -224,7 +224,7 @@ export class PlanEnforcementService {
     });
 
     if (!property) {
-      return { allowed: false, message: 'Propriedade não encontrada' };
+      return { allowed: false, message: 'Imóvel não encontrado' };
     }
 
     if (property.isFrozen) {
@@ -247,7 +247,7 @@ export class PlanEnforcementService {
     });
 
     if (!property) {
-      return { allowed: false, message: 'Propriedade não encontrada' };
+      return { allowed: false, message: 'Imóvel não encontrado' };
     }
 
     if (property.isFrozen) {
@@ -324,7 +324,7 @@ export class PlanEnforcementService {
         await this.disableApiAccess(agencyId);
       }
 
-      result.message = `Plano alterado de ${oldPlan} para ${newPlan}. ${result.propertiesFrozen} propriedade(s) e ${result.usersFrozen} usuário(s) foram congelados.`;
+      result.message = `Plano alterado de ${oldPlan} para ${newPlan}. ${result.propertiesFrozen} imóvel(eis) e ${result.usersFrozen} usuário(s) foram congelados.`;
     }
     // Upgrade scenario: unfreeze entities up to new limit
     else if (newLimits.properties > oldLimits.properties || newLimits.users > oldLimits.users) {
@@ -341,7 +341,7 @@ export class PlanEnforcementService {
         await this.enableApiAccess(agencyId);
       }
 
-      result.message = `Upgrade realizado de ${oldPlan} para ${newPlan}. ${result.propertiesUnfrozen} propriedade(s) e ${result.usersUnfrozen} usuário(s) foram desbloqueados.`;
+      result.message = `Upgrade realizado de ${oldPlan} para ${newPlan}. ${result.propertiesUnfrozen} imóvel(eis) e ${result.usersUnfrozen} usuário(s) foram desbloqueados.`;
     }
     else {
       result.message = `Plano mantido em ${newPlan}. Nenhuma alteração necessária.`;
@@ -413,7 +413,7 @@ export class PlanEnforcementService {
     return {
       frozen: toFreeze.length,
       kept: toKeepActive.map(p => p.id.toString()),
-      message: `${toFreeze.length} propriedade(s) foram congeladas devido ao limite do plano.`,
+      message: `${toFreeze.length} imóvel(eis) foram congelados devido ao limite do plano.`,
     };
   }
 
@@ -496,7 +496,7 @@ export class PlanEnforcementService {
     if (canUnfreeze === 0) {
       return {
         unfrozen: 0,
-        message: 'Nenhuma propriedade para descongelar.',
+        message: 'Nenhum imóvel para descongelar.',
       };
     }
 
@@ -528,7 +528,7 @@ export class PlanEnforcementService {
 
     return {
       unfrozen: frozenProperties.length,
-      message: `${frozenProperties.length} propriedade(s) foram desbloqueadas.`,
+      message: `${frozenProperties.length} imóvel(eis) foram desbloqueados.`,
     };
   }
 
@@ -602,7 +602,7 @@ export class PlanEnforcementService {
 
     // This operation is mainly for FREE plan or when limit is 1
     if (limits.properties > 1) {
-      throw new BadRequestException('Esta operação só é disponível para planos com limite de 1 propriedade.');
+      throw new BadRequestException('Esta operação só é disponível para planos com limite de 1 imóvel.');
     }
 
     // Get the property to activate
@@ -616,7 +616,7 @@ export class PlanEnforcementService {
     });
 
     if (!newActiveProperty) {
-      throw new NotFoundException('Propriedade não encontrada ou não pertence a esta agência.');
+      throw new NotFoundException('Imóvel não encontrado ou não pertence a esta agência.');
     }
 
     // Get the currently active property
@@ -633,7 +633,7 @@ export class PlanEnforcementService {
     if (!newActiveProperty.isFrozen) {
       return {
         success: false,
-        message: 'Esta propriedade já está ativa.',
+        message: 'Este imóvel já está ativo.',
       };
     }
 

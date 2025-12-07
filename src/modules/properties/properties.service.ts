@@ -76,7 +76,7 @@ export class PropertiesService {
     // Check plan limits for INDEPENDENT_OWNER users
     const planCheck = await this.plansService.checkPlanLimits(userId, 'property');
     if (!planCheck.allowed) {
-      throw new ForbiddenException(planCheck.message || 'Você atingiu o limite de propriedades do seu plano.');
+      throw new ForbiddenException(planCheck.message || 'Você atingiu o limite de imóveis do seu plano.');
     }
 
     // Check agency plan limits if agencyId is available
@@ -86,7 +86,7 @@ export class PropertiesService {
         'create',
       );
       if (!agencyCheck.allowed) {
-        throw new ForbiddenException(agencyCheck.message || 'A agência atingiu o limite de propriedades do plano.');
+        throw new ForbiddenException(agencyCheck.message || 'A agência atingiu o limite de imóveis do plano.');
       }
     }
 

@@ -476,7 +476,7 @@ export class PlansService {
         allowed,
         current: propertyCount,
         limit,
-        message: allowed ? undefined : `Você atingiu o limite de ${limit} propriedades do seu plano ${planName}. Faça upgrade para adicionar mais propriedades.`,
+        message: allowed ? undefined : `Você atingiu o limite de ${limit} imóveis do seu plano ${planName}. Faça upgrade para adicionar mais imóveis.`,
       };
     }
 

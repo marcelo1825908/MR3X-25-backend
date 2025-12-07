@@ -105,8 +105,8 @@ export const DEFAULT_PLANS: Omit<Plan, 'id' | 'subscribers' | 'createdAt' | 'upd
     price: 0,
     propertyLimit: 1,     // Display agency limit (1 property)
     userLimit: 5,         // Display agency limit (5 users)
-    features: ['1 propriedade ativa', '5 usuários', 'Suporte por email', 'Visualização de dados históricos'],
-    description: 'Plano gratuito para começar - Propriedades extras são congeladas, não excluídas',
+    features: ['1 imóvel ativo', '5 usuários', 'Suporte por email', 'Visualização de dados históricos'],
+    description: 'Plano gratuito para começar - Imóveis extras são congelados, não excluídos',
     isActive: true,
   },
   {
@@ -114,7 +114,7 @@ export const DEFAULT_PLANS: Omit<Plan, 'id' | 'subscribers' | 'createdAt' | 'upd
     price: 99.90,
     propertyLimit: 50,
     userLimit: 10,
-    features: ['50 propriedades', '10 usuários', 'Suporte prioritário', 'Relatórios básicos'],
+    features: ['50 imóveis', '10 usuários', 'Suporte prioritário', 'Relatórios básicos'],
     description: 'Ideal para agências pequenas',
     isActive: true,
   },
@@ -123,7 +123,7 @@ export const DEFAULT_PLANS: Omit<Plan, 'id' | 'subscribers' | 'createdAt' | 'upd
     price: 199.90,
     propertyLimit: 100,
     userLimit: 20,
-    features: ['100 propriedades', '20 usuários', 'Suporte prioritário', 'Relatórios avançados', 'API access', 'Automações'],
+    features: ['100 imóveis', '20 usuários', 'Suporte prioritário', 'Relatórios avançados', 'API access', 'Automações'],
     description: 'Para agências em crescimento',
     isActive: true,
   },
@@ -132,7 +132,7 @@ export const DEFAULT_PLANS: Omit<Plan, 'id' | 'subscribers' | 'createdAt' | 'upd
     price: 499.90,
     propertyLimit: 500,
     userLimit: 100,
-    features: ['500 propriedades', '100 usuários', 'Suporte 24/7', 'API access', 'White-label', 'Analytics avançado', 'Automações ilimitadas'],
+    features: ['500 imóveis', '100 usuários', 'Suporte 24/7', 'API access', 'White-label', 'Analytics avançado', 'Automações ilimitadas'],
     description: 'Para grandes agências e empresas',
     isActive: true,
   },
