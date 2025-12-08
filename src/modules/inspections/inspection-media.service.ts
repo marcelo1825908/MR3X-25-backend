@@ -3,7 +3,7 @@ import { PrismaService } from '../../config/prisma.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
-interface UploadedMedia {
+export interface UploadedMedia {
   id: string;
   inspectionId: string;
   itemIndex?: number;
