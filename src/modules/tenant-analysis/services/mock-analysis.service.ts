@@ -152,7 +152,7 @@ export class MockAnalysisService {
         hasProtests: true,
         protestRecords: [
           {
-            notaryOffice: `${(hash % 10) + 1}º Tabelião de Protestos`,
+            notaryOffice: `${(hash % 10) + 1}º Tabelião de Protesto`,
             amount: 1200 + (hash % 2000),
             creditor: 'Empresa de Serviços Ltda',
             status: 'Ativo',
@@ -187,14 +187,14 @@ export class MockAnalysisService {
         hasProtests: true,
         protestRecords: [
           {
-            notaryOffice: `${(hash % 10) + 1}º Tabelião de Protestos`,
+            notaryOffice: `${(hash % 10) + 1}º Tabelião de Protesto`,
             amount: 3500,
             creditor: 'Imobiliária Central',
             status: 'Pago',
             date: '2023-09-20',
           },
           {
-            notaryOffice: `${((hash + 3) % 10) + 1}º Tabelião de Protestos`,
+            notaryOffice: `${((hash + 3) % 10) + 1}º Tabelião de Protesto`,
             amount: 2800,
             creditor: 'Condomínio Edifício Sol',
             status: 'Ativo',
@@ -243,14 +243,14 @@ export class MockAnalysisService {
         hasProtests: true,
         protestRecords: [
           {
-            notaryOffice: '3º Tabelião de Protestos',
+            notaryOffice: '3º Tabelião de Protesto',
             amount: 8500,
             creditor: 'Imobiliária Premium',
             status: 'Ativo',
             date: '2024-01-05',
           },
           {
-            notaryOffice: '7º Tabelião de Protestos',
+            notaryOffice: '7º Tabelião de Protesto',
             amount: 4200,
             creditor: 'Banco Nacional',
             status: 'Ativo',

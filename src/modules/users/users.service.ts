@@ -741,9 +741,10 @@ export class UsersService {
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
-    // Determine the correct agencyId and ownerId based on the requesting user role
+    // Determine the correct agencyId, ownerId, and brokerId based on the requesting user role
     let finalAgencyId: bigint | null = null;
     let finalOwnerId: bigint | null = null;
+    let finalBrokerId: bigint | null = null;
 
     if (requestingUserRole === 'AGENCY_ADMIN') {
       const adminRecord = await this.prisma.user.findUnique({
@@ -752,6 +753,7 @@ export class UsersService {
       });
       finalAgencyId = adminRecord?.agencyId ?? null;
       finalOwnerId = null;
+      finalBrokerId = dto.brokerId ? BigInt(dto.brokerId) : null;
     } else if (requestingUserRole === 'AGENCY_MANAGER') {
       const managerRecord = await this.prisma.user.findUnique({
         where: { id: BigInt(requestingUserId) },
@@ -759,6 +761,7 @@ export class UsersService {
       });
       finalAgencyId = managerRecord?.agencyId ?? null;
       finalOwnerId = null;
+      finalBrokerId = dto.brokerId ? BigInt(dto.brokerId) : null;
     } else if (requestingUserRole === 'BROKER') {
       const brokerRecord = await this.prisma.user.findUnique({
         where: { id: BigInt(requestingUserId) },
@@ -766,12 +769,15 @@ export class UsersService {
       });
       finalOwnerId = null;
       finalAgencyId = brokerRecord?.agencyId ?? null;
+      // When broker creates tenant, automatically link the tenant to this broker
+      finalBrokerId = BigInt(requestingUserId);
     } else if (requestingUserRole === 'PROPRIETARIO' || requestingUserRole === 'INDEPENDENT_OWNER') {
       finalOwnerId = BigInt(requestingUserId);
       finalAgencyId = null;
     } else {
       finalOwnerId = dto.agencyId ? null : BigInt(requestingUserId);
       finalAgencyId = dto.agencyId ? BigInt(dto.agencyId) : null;
+      finalBrokerId = dto.brokerId ? BigInt(dto.brokerId) : null;
     }
 
     const tenant = await this.prisma.user.create({
@@ -793,6 +799,7 @@ export class UsersService {
         status: 'ACTIVE',
         ownerId: finalOwnerId,
         agencyId: finalAgencyId,
+        brokerId: finalBrokerId,
         createdBy: BigInt(requestingUserId),
       },
       select: {
@@ -810,6 +817,7 @@ export class UsersService {
         createdAt: true,
         createdBy: true,
         agencyId: true,
+        brokerId: true,
         plainPassword: true,
       },
     });
@@ -818,6 +826,7 @@ export class UsersService {
       ...tenant,
       id: tenant.id.toString(),
       agencyId: tenant.agencyId?.toString() || null,
+      brokerId: tenant.brokerId?.toString() || null,
       createdBy: tenant.createdBy?.toString() || null,
       birthDate: tenant.birthDate?.toISOString() || null,
       createdAt: tenant.createdAt?.toISOString() || null,
@@ -853,6 +862,10 @@ export class UsersService {
     if (dto.birthDate !== undefined) {
       updateData.birthDate = dto.birthDate ? new Date(dto.birthDate) : null;
     }
+    // Allow Manager/Admin to link broker to tenant
+    if (dto.brokerId !== undefined) {
+      updateData.brokerId = dto.brokerId ? BigInt(dto.brokerId) : null;
+    }
 
     const updated = await this.prisma.user.update({
       where: { id: BigInt(tenantId) },
@@ -871,6 +884,7 @@ export class UsersService {
         state: true,
         createdAt: true,
         agencyId: true,
+        brokerId: true,
         plainPassword: true,
       },
     });
@@ -879,6 +893,7 @@ export class UsersService {
       ...updated,
       id: updated.id.toString(),
       agencyId: updated.agencyId?.toString() || null,
+      brokerId: updated.brokerId?.toString() || null,
       birthDate: updated.birthDate?.toISOString() || null,
       createdAt: updated.createdAt?.toISOString() || null,
     };

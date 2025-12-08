@@ -164,6 +164,11 @@ export class CreateTenantDto {
   @IsOptional()
   @IsString()
   userType?: string;
+
+  @ApiPropertyOptional({ description: 'Broker ID to link tenant to a broker' })
+  @IsOptional()
+  @IsString()
+  brokerId?: string;
 }
 
 export class UpdateTenantDto {
@@ -211,6 +216,11 @@ export class UpdateTenantDto {
   @IsOptional()
   @IsString()
   state?: string;
+
+  @ApiPropertyOptional({ description: 'Broker ID to link tenant to a broker' })
+  @IsOptional()
+  @IsString()
+  brokerId?: string;
 }
 
 export class ChangePasswordDto {
