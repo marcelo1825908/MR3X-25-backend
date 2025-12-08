@@ -26,6 +26,7 @@ import { InvoicesModule } from './modules/invoices/invoices.module';
 import { ApiClientModule } from './modules/api-client/api-client.module';
 import { SalesRepModule } from './modules/sales-rep/sales-rep.module';
 import { AuditorModule } from './modules/auditor/auditor.module';
+import { PlatformManagerModule } from './modules/platform-manager/platform-manager.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -60,6 +61,7 @@ import { HealthController } from './health.controller';
     ApiClientModule,
     SalesRepModule,
     AuditorModule,
+    PlatformManagerModule,
   ],
   controllers: [HealthController],
 })
