@@ -100,14 +100,16 @@ export class UsersService {
     agencyId?: string;
     status?: string;
     createdById?: string;
+    excludeUserId?: string;
   }) {
-    const { skip = 0, take = 10, role, agencyId, status, createdById } = params;
+    const { skip = 0, take = 10, role, agencyId, status, createdById, excludeUserId } = params;
 
     const where: any = {};
     if (role) where.role = role;
     if (agencyId) where.agencyId = BigInt(agencyId);
     if (status) where.status = status;
     if (createdById) where.createdBy = BigInt(createdById);
+    if (excludeUserId) where.id = { not: BigInt(excludeUserId) };
 
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({

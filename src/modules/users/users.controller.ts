@@ -23,12 +23,14 @@ export class UsersController {
   @ApiQuery({ name: 'role', required: false, enum: UserRole })
   @ApiQuery({ name: 'agencyId', required: false })
   @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'excludeCurrentUser', required: false })
   async findAll(
     @Query('skip') skip?: number,
     @Query('take') take?: number,
     @Query('role') role?: UserRole,
     @Query('agencyId') agencyId?: string,
     @Query('status') status?: string,
+    @Query('excludeCurrentUser') excludeCurrentUser?: string,
     @CurrentUser() user?: any,
   ) {
     // CEO sees all users
@@ -45,7 +47,11 @@ export class UsersController {
         createdById = user.sub; // For other roles, only see users they created
       }
     }
-    return this.usersService.findAll({ skip, take, role, agencyId, status, createdById });
+
+    // Exclude current user from results if requested
+    const excludeUserId = excludeCurrentUser === 'true' ? user.sub : undefined;
+
+    return this.usersService.findAll({ skip, take, role, agencyId, status, createdById, excludeUserId });
   }
 
   @Get('details')
