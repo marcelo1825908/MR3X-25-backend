@@ -136,7 +136,7 @@ export class InvoicesService {
   }) {
     const {
       skip = 0,
-      take = 50,
+      take = 10,
       agencyId,
       propertyId,
       contractId,

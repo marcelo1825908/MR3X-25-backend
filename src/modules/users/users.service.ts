@@ -101,7 +101,7 @@ export class UsersService {
     status?: string;
     createdById?: string;
   }) {
-    const { skip = 0, take = 20, role, agencyId, status, createdById } = params;
+    const { skip = 0, take = 10, role, agencyId, status, createdById } = params;
 
     const where: any = {};
     if (role) where.role = role;

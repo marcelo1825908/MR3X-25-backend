@@ -16,7 +16,7 @@ export class PropertiesService {
   ) {}
 
   async findAll(params: { skip?: number; take?: number; agencyId?: string; status?: string; ownerId?: string; createdById?: string }) {
-    const { skip = 0, take = 20, agencyId, status, ownerId, createdById } = params;
+    const { skip = 0, take = 10, agencyId, status, ownerId, createdById } = params;
 
     const where: any = { deleted: false };
     if (agencyId) where.agencyId = BigInt(agencyId);

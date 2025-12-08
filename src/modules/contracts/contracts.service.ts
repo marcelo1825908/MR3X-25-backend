@@ -27,7 +27,7 @@ export class ContractsService {
   ) {}
 
   async findAll(params: { skip?: number; take?: number; agencyId?: string; status?: string; createdById?: string; userId?: string }) {
-    const { skip = 0, take = 20, agencyId, status, createdById, userId } = params;
+    const { skip = 0, take = 10, agencyId, status, createdById, userId } = params;
 
     const where: any = { deleted: false };
     if (status) where.status = status;

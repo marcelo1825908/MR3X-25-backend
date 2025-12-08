@@ -22,7 +22,7 @@ export class InspectionsService {
   }) {
     const {
       skip = 0,
-      take = 20,
+      take = 10,
       agencyId,
       propertyId,
       contractId,

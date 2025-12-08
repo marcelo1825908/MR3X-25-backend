@@ -72,9 +72,10 @@ model Agency {
   state         String?  @db.VarChar(10)
   zipCode       String?  @map("zip_code") @db.VarChar(20)
   status        String   @default("ACTIVE") @db.VarChar(20)
-  plan          String   @default("FREE") @db.VarChar(20)
-  maxProperties Int?     @default(1) @map("max_properties") // FREE plan: 1 property for agencies
-  maxUsers      Int?     @default(5) @map("max_users") // FREE plan: 5 users for agencies
+  plan          String   @default("FREE") @db.VarChar(20) // FREE, BASIC, PROFESSIONAL, ENTERPRISE
+  maxProperties Int?     @default(1) @map("max_properties") // FREE: 1, BASIC: 20, PROFESSIONAL: 60, ENTERPRISE: 200
+  maxUsers      Int?     @default(2) @map("max_users") // FREE: 2, BASIC: 5, PROFESSIONAL: 10, ENTERPRISE: unlimited
+  maxContracts  Int?     @default(1) @map("max_contracts") // Active contract limit based on plan
   agencyFee     Float    @default(8.0) @map("agency_fee") // Percentage fee for this agency (0-100)
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(0)
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
@@ -83,6 +84,25 @@ model Agency {
   lastPlanChange        DateTime? @map("last_plan_change") @db.Timestamp(0)
   frozenPropertiesCount Int       @default(0) @map("frozen_properties_count")
   frozenUsersCount      Int       @default(0) @map("frozen_users_count")
+
+  // Usage tracking for current billing period
+  activeContractsCount  Int @default(0) @map("active_contracts_count")
+  activePropertiesCount Int @default(0) @map("active_properties_count")
+  activeUsersCount      Int @default(0) @map("active_users_count")
+
+  // Subscription billing
+  subscriptionId     String?   @map("subscription_id") @db.VarChar(100) // Asaas subscription ID
+  subscriptionStatus String?   @default("ACTIVE") @map("subscription_status") @db.VarChar(30) // ACTIVE, SUSPENDED, CANCELED
+  currentPeriodStart DateTime? @map("current_period_start") @db.Date
+  currentPeriodEnd   DateTime? @map("current_period_end") @db.Date
+  nextBillingDate    DateTime? @map("next_billing_date") @db.Date
+  trialEndsAt        DateTime? @map("trial_ends_at") @db.Timestamp(0)
+  canceledAt         DateTime? @map("canceled_at") @db.Timestamp(0)
+
+  // Payment tracking
+  lastPaymentAt     DateTime? @map("last_payment_at") @db.Timestamp(0)
+  lastPaymentAmount Decimal?  @map("last_payment_amount") @db.Decimal(10, 2)
+  totalSpent        Decimal   @default(0) @map("total_spent") @db.Decimal(12, 2) // Lifetime value
 
   // Default penalty and fee settings for all contracts in this agency
   defaultEarlyTerminationPenaltyPercent Decimal? @default(3.0) @map("default_early_termination_penalty_percent") @db.Decimal(5, 2)
@@ -99,13 +119,14 @@ model Agency {
   apiKey     String? @map("api_key") @db.VarChar(255)
 
   // Relations
-  users            User[]
-  properties       Property[]
-  contracts        Contract[]
-  payments         Payment[]
-  notifications    Notification[]
-  invoices         Invoice[]
-  serviceContracts ServiceContract[]
+  users             User[]
+  properties        Property[]
+  contracts         Contract[]
+  payments          Payment[]
+  notifications     Notification[]
+  invoices          Invoice[]
+  serviceContracts  ServiceContract[]
+  microtransactions Microtransaction[]
 
   @@map("agencies")
 }
@@ -230,6 +251,9 @@ model User {
 
   // Service contract relations (owner)
   serviceContractsAsOwner ServiceContract[] @relation("ServiceContractOwner")
+
+  // Microtransaction relations
+  microtransactions Microtransaction[]
 
   @@map("users")
 }
@@ -1462,4 +1486,72 @@ model TenantAnalysis {
   @@index([status])
   @@index([riskLevel])
   @@map("tenant_analyses")
+}
+
+/// Microtransaction types for pay-per-use features on FREE plan
+enum MicrotransactionType {
+  EXTRA_CONTRACT // Additional contract beyond plan limit (R$ 4.90 on FREE)
+  INSPECTION // Professional inspection report (R$ 3.90 on FREE)
+  SETTLEMENT // Settlement/agreement document (R$ 6.90 on FREE)
+  SCREENING // Tenant credit analysis (R$ 8.90 on FREE)
+  EXTRA_USER // Additional user slot (for future use)
+  EXTRA_PROPERTY // Additional property slot (for future use)
+  API_CALL // API usage fee (for future use)
+}
+
+enum MicrotransactionStatus {
+  PENDING // Created but not charged yet
+  PROCESSING // Payment being processed
+  PAID // Successfully paid
+  FAILED // Payment failed
+  REFUNDED // Refunded to customer
+  CANCELED // Canceled before payment
+}
+
+/// Microtransactions - Pay-per-use charges for features beyond plan limits
+model Microtransaction {
+  id       BigInt  @id @default(autoincrement()) @db.UnsignedBigInt
+  agencyId BigInt? @map("agency_id") @db.UnsignedBigInt
+  userId   BigInt? @map("user_id") @db.UnsignedBigInt
+
+  // Transaction details
+  type        MicrotransactionType
+  amount      Decimal                @db.Decimal(10, 2)
+  description String?                @db.VarChar(255)
+  status      MicrotransactionStatus @default(PENDING)
+
+  // Related entity references
+  contractId   BigInt? @map("contract_id") @db.UnsignedBigInt
+  inspectionId BigInt? @map("inspection_id") @db.UnsignedBigInt
+  agreementId  BigInt? @map("agreement_id") @db.UnsignedBigInt
+  analysisId   BigInt? @map("analysis_id") @db.UnsignedBigInt
+
+  // Payment integration
+  asaasPaymentId  String? @map("asaas_payment_id") @db.VarChar(100)
+  asaasInvoiceUrl String? @map("asaas_invoice_url") @db.VarChar(500)
+  paymentMethod   String? @map("payment_method") @db.VarChar(50) // PIX, BOLETO, CREDIT_CARD
+  pixQrCode       String? @map("pix_qr_code") @db.Text
+  boletoUrl       String? @map("boleto_url") @db.VarChar(500)
+
+  // Payment tracking
+  paidAt       DateTime? @map("paid_at") @db.Timestamp(0)
+  refundedAt   DateTime? @map("refunded_at") @db.Timestamp(0)
+  refundAmount Decimal?  @map("refund_amount") @db.Decimal(10, 2)
+  refundReason String?   @map("refund_reason") @db.VarChar(255)
+
+  // Metadata
+  notes     String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  // Relations
+  agency Agency? @relation(fields: [agencyId], references: [id])
+  user   User?   @relation(fields: [userId], references: [id])
+
+  @@index([agencyId])
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+  @@map("microtransactions")
 }
