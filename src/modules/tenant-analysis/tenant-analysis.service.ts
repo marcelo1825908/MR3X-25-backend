@@ -286,6 +286,15 @@ export class TenantAnalysisService {
           name: item.requestedBy.name,
           email: item.requestedBy.email,
         },
+        // Include basicData for tenant registration
+        basicData: item.documentType === 'CPF' ? {
+          type: 'CPF',
+          phone: item.personPhone,
+          birthDate: item.birthDate || null,
+        } : {
+          type: 'CNPJ',
+          phone: item.companyPhone,
+        },
       })),
       total,
       page,

@@ -788,49 +788,89 @@ model Inspection {
   inspectorId   BigInt    @map("inspector_id") @db.UnsignedBigInt
   assignedById  BigInt?   @map("assigned_by_id") @db.UnsignedBigInt
 
- 
+  // Content fields
   rooms  String? @db.Text
   photos String? @db.Text
   notes  String? @db.Text
 
- 
-  tenantSignature    String?   @map("tenant_signature") @db.Text
-  tenantSignedAt     DateTime? @map("tenant_signed_at") @db.Timestamp(0)
-  ownerSignature     String?   @map("owner_signature") @db.Text
-  ownerSignedAt      DateTime? @map("owner_signed_at") @db.Timestamp(0)
-  agencySignature    String?   @map("agency_signature") @db.Text
-  agencySignedAt     DateTime? @map("agency_signed_at") @db.Timestamp(0)
-  inspectorSignature String?   @map("inspector_signature") @db.Text
-  inspectorSignedAt  DateTime? @map("inspector_signed_at") @db.Timestamp(0)
+  // Tenant signature with full security data
+  tenantSignature   String?   @map("tenant_signature") @db.Text
+  tenantSignedAt    DateTime? @map("tenant_signed_at") @db.Timestamp(0)
+  tenantSignedIP    String?   @map("tenant_signed_ip") @db.VarChar(45)
+  tenantSignedAgent String?   @map("tenant_signed_agent") @db.VarChar(500)
+  tenantGeoLat      Float?    @map("tenant_geo_lat")
+  tenantGeoLng      Float?    @map("tenant_geo_lng")
+  tenantGeoConsent  Boolean   @default(false) @map("tenant_geo_consent")
 
- 
-  pdfReportUrl      String?   @map("pdf_report_url") @db.VarChar(500)
-  reportGeneratedAt DateTime? @map("report_generated_at") @db.Timestamp(0)
+  // Owner signature with full security data
+  ownerSignature   String?   @map("owner_signature") @db.Text
+  ownerSignedAt    DateTime? @map("owner_signed_at") @db.Timestamp(0)
+  ownerSignedIP    String?   @map("owner_signed_ip") @db.VarChar(45)
+  ownerSignedAgent String?   @map("owner_signed_agent") @db.VarChar(500)
+  ownerGeoLat      Float?    @map("owner_geo_lat")
+  ownerGeoLng      Float?    @map("owner_geo_lng")
+  ownerGeoConsent  Boolean   @default(false) @map("owner_geo_consent")
 
- 
+  // Agency signature with full security data
+  agencySignature   String?   @map("agency_signature") @db.Text
+  agencySignedAt    DateTime? @map("agency_signed_at") @db.Timestamp(0)
+  agencySignedIP    String?   @map("agency_signed_ip") @db.VarChar(45)
+  agencySignedAgent String?   @map("agency_signed_agent") @db.VarChar(500)
+  agencyGeoLat      Float?    @map("agency_geo_lat")
+  agencyGeoLng      Float?    @map("agency_geo_lng")
+  agencyGeoConsent  Boolean   @default(false) @map("agency_geo_consent")
+
+  // Inspector signature with full security data
+  inspectorSignature   String?   @map("inspector_signature") @db.Text
+  inspectorSignedAt    DateTime? @map("inspector_signed_at") @db.Timestamp(0)
+  inspectorSignedIP    String?   @map("inspector_signed_ip") @db.VarChar(45)
+  inspectorSignedAgent String?   @map("inspector_signed_agent") @db.VarChar(500)
+  inspectorGeoLat      Float?    @map("inspector_geo_lat")
+  inspectorGeoLng      Float?    @map("inspector_geo_lng")
+  inspectorGeoConsent  Boolean   @default(false) @map("inspector_geo_consent")
+
+  // PDF and hash fields for legal security
+  pdfReportUrl       String?   @map("pdf_report_url") @db.VarChar(500)
+  provisionalPdfPath String?   @map("provisional_pdf_path") @db.VarChar(500)
+  finalPdfPath       String?   @map("final_pdf_path") @db.VarChar(500)
+  provisionalHash    String?   @map("provisional_hash") @db.VarChar(255)
+  hashFinal          String?   @map("hash_final") @db.VarChar(255)
+  reportGeneratedAt  DateTime? @map("report_generated_at") @db.Timestamp(0)
+
+  // Token and verification for immutability
+  inspectionToken String? @unique @map("inspection_token") @db.VarChar(100)
+  verificationUrl String? @map("verification_url") @db.VarChar(500)
+
+  // Client tracking info
+  clientIP  String? @map("client_ip") @db.VarChar(45)
+  userAgent String? @map("user_agent") @db.VarChar(500)
+
+  // Status and approval workflow
   status          String    @default("RASCUNHO") @db.VarChar(20)
   approvedById    BigInt?   @map("approved_by_id") @db.UnsignedBigInt
   approvedAt      DateTime? @map("approved_at") @db.Timestamp(0)
   rejectionReason String?   @map("rejection_reason") @db.Text
 
- 
+  // Template reference
   templateId BigInt? @map("template_id") @db.UnsignedBigInt
 
- 
+  // Location and audit
   location  String?  @db.VarChar(255)
   createdBy BigInt?  @map("created_by") @db.UnsignedBigInt
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
 
- 
-  property      Property            @relation(fields: [propertyId], references: [id])
-  inspector     User                @relation("InspectionInspector", fields: [inspectorId], references: [id])
-  assignedBy    User?               @relation("InspectionAssignedBy", fields: [assignedById], references: [id])
-  approvedBy    User?               @relation("InspectionApprovedBy", fields: [approvedById], references: [id])
-  createdByUser User?               @relation("InspectionCreatedBy", fields: [createdBy], references: [id])
-  template      InspectionTemplate? @relation(fields: [templateId], references: [id])
-  items         InspectionItem[]
-  media         InspectionMedia[]
+  // Relations
+  property       Property                 @relation(fields: [propertyId], references: [id])
+  inspector      User                     @relation("InspectionInspector", fields: [inspectorId], references: [id])
+  assignedBy     User?                    @relation("InspectionAssignedBy", fields: [assignedById], references: [id])
+  approvedBy     User?                    @relation("InspectionApprovedBy", fields: [approvedById], references: [id])
+  createdByUser  User?                    @relation("InspectionCreatedBy", fields: [createdBy], references: [id])
+  template       InspectionTemplate?      @relation(fields: [templateId], references: [id])
+  items          InspectionItem[]
+  media          InspectionMedia[]
+  audits         InspectionAudit[]
+  signatureLinks InspectionSignatureLink[]
 
   @@map("inspections")
 }
@@ -889,6 +929,41 @@ model InspectionMedia {
   uploadedBy User       @relation("InspectionMediaUploadedBy", fields: [uploadedById], references: [id])
 
   @@map("inspection_media")
+}
+
+// Audit trail for inspection actions (signatures, approvals, rejections)
+model InspectionAudit {
+  id           BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  inspectionId BigInt   @map("inspection_id") @db.UnsignedBigInt
+  action       String   @db.VarChar(50) // CREATED, SIGNED_BY_TENANT, SIGNED_BY_OWNER, SIGNED_BY_AGENCY, SIGNED_BY_INSPECTOR, APPROVED, REJECTED, PDF_GENERATED
+  performedBy  BigInt   @map("performed_by") @db.UnsignedBigInt
+  performedAt  DateTime @default(now()) @map("performed_at") @db.Timestamp(0)
+  details      String?  @db.Text // JSON with additional info (IP, geolocation, etc.)
+
+  inspection Inspection @relation(fields: [inspectionId], references: [id])
+
+  @@index([inspectionId])
+  @@map("inspection_audits")
+}
+
+// Signature invitation links for external signing (tenant, owner)
+model InspectionSignatureLink {
+  id           BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  inspectionId BigInt    @map("inspection_id") @db.UnsignedBigInt
+  signerType   String    @map("signer_type") @db.VarChar(20) // TENANT, OWNER, AGENCY, INSPECTOR
+  signerEmail  String    @map("signer_email") @db.VarChar(191)
+  signerName   String?   @map("signer_name") @db.VarChar(255)
+  token        String    @unique @db.VarChar(191)
+  expiresAt    DateTime  @map("expires_at") @db.Timestamp(0)
+  usedAt       DateTime? @map("used_at") @db.Timestamp(0)
+  sentAt       DateTime? @map("sent_at") @db.Timestamp(0)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
+
+  inspection Inspection @relation(fields: [inspectionId], references: [id])
+
+  @@index([token])
+  @@index([inspectionId])
+  @@map("inspection_signature_links")
 }
 
 model AuditLog {

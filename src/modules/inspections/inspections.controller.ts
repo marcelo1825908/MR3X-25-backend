@@ -9,8 +9,12 @@ import {
   Param,
   Query,
   UseGuards,
+  Res,
+  Headers,
+  Ip,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { Response } from 'express';
 import { InspectionsService } from './inspections.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -20,13 +24,23 @@ import { OwnerPermission } from '../../common/decorators/owner-permission.decora
 import { OwnerAction } from '../../common/constants/owner-permissions.constants';
 import { CreateInspectionDto, InspectionStatus } from './dto/create-inspection.dto';
 import { UpdateInspectionDto, SignInspectionDto, ApproveRejectInspectionDto } from './dto/update-inspection.dto';
+import { InspectionPdfService } from './services/inspection-pdf.service';
+import { InspectionHashService } from './services/inspection-hash.service';
+import { InspectionSignatureService, SignatureData } from './services/inspection-signature.service';
+import { InspectionSignatureLinkService } from './services/inspection-signature-link.service';
 
 @ApiTags('Inspections')
 @Controller('inspections')
 @UseGuards(JwtAuthGuard, RolesGuard, OwnerPermissionGuard)
 @ApiBearerAuth()
 export class InspectionsController {
-  constructor(private readonly inspectionsService: InspectionsService) {}
+  constructor(
+    private readonly inspectionsService: InspectionsService,
+    private readonly pdfService: InspectionPdfService,
+    private readonly hashService: InspectionHashService,
+    private readonly signatureService: InspectionSignatureService,
+    private readonly signatureLinkService: InspectionSignatureLinkService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'List all inspections' })
@@ -232,5 +246,151 @@ export class InspectionsController {
   @OwnerPermission('inspections', OwnerAction.DELETE)
   async remove(@Param('id') id: string) {
     return this.inspectionsService.remove(id);
+  }
+
+  // ==================== PDF Generation ====================
+
+  @Get(':id/pdf/provisional')
+  @ApiOperation({ summary: 'Generate provisional PDF (with watermark)' })
+  async generateProvisionalPdf(
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const pdfBuffer = await this.pdfService.generateProvisionalPdf(BigInt(id));
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="vistoria-provisoria-${id}.pdf"`,
+      'Content-Length': pdfBuffer.length,
+    });
+
+    res.end(pdfBuffer);
+  }
+
+  @Get(':id/pdf/final')
+  @ApiOperation({ summary: 'Generate final PDF (with all signatures)' })
+  async generateFinalPdf(
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const pdfBuffer = await this.pdfService.generateFinalPdf(BigInt(id));
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="vistoria-final-${id}.pdf"`,
+      'Content-Length': pdfBuffer.length,
+    });
+
+    res.end(pdfBuffer);
+  }
+
+  @Get(':id/pdf/download/:type')
+  @ApiOperation({ summary: 'Download stored PDF' })
+  async downloadPdf(
+    @Param('id') id: string,
+    @Param('type') type: 'provisional' | 'final',
+    @Res() res: Response,
+  ) {
+    const pdfBuffer = await this.pdfService.getStoredPdf(BigInt(id), type);
+
+    if (!pdfBuffer) {
+      res.status(404).json({ message: 'PDF nao encontrado. Gere o PDF primeiro.' });
+      return;
+    }
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="vistoria-${type}-${id}.pdf"`,
+      'Content-Length': pdfBuffer.length,
+    });
+
+    res.end(pdfBuffer);
+  }
+
+  // ==================== Electronic Signature ====================
+
+  @Post(':id/sign/:signerType')
+  @ApiOperation({ summary: 'Sign inspection with electronic signature' })
+  @OwnerPermission('inspections', OwnerAction.SIGN)
+  async signInspection(
+    @Param('id') id: string,
+    @Param('signerType') signerType: 'tenant' | 'owner' | 'agency' | 'inspector',
+    @Body() signatureData: SignatureData,
+    @CurrentUser('sub') userId: string,
+    @Ip() clientIP: string,
+    @Headers('user-agent') userAgent: string,
+  ) {
+    return this.signatureService.signInspection(
+      id,
+      signerType,
+      {
+        ...signatureData,
+        clientIP,
+        userAgent,
+      },
+      userId,
+    );
+  }
+
+  @Get(':id/signature-status')
+  @ApiOperation({ summary: 'Get signature status for inspection' })
+  async getSignatureStatus(@Param('id') id: string) {
+    return this.signatureService.getSignatureStatus(id);
+  }
+
+  @Post(':id/finalize')
+  @ApiOperation({ summary: 'Finalize inspection after all signatures' })
+  @OwnerPermission('inspections', OwnerAction.APPROVE)
+  async finalizeInspection(
+    @Param('id') id: string,
+    @CurrentUser('sub') userId: string,
+  ) {
+    await this.signatureService.finalizeInspection(id, userId);
+    return { message: 'Vistoria finalizada com sucesso' };
+  }
+
+  // ==================== Signature Links ====================
+
+  @Post(':id/signature-links')
+  @ApiOperation({ summary: 'Create signature invitation links' })
+  @OwnerPermission('inspections', OwnerAction.EDIT)
+  async createSignatureLinks(
+    @Param('id') id: string,
+    @Body() body: {
+      parties: Array<{
+        signerType: 'tenant' | 'owner' | 'agency' | 'inspector';
+        email: string;
+        name?: string;
+      }>;
+      expiresInHours?: number;
+    },
+  ) {
+    return this.signatureLinkService.createSignatureLinksForInspection(
+      BigInt(id),
+      body.parties,
+      body.expiresInHours,
+    );
+  }
+
+  @Get(':id/signature-links')
+  @ApiOperation({ summary: 'Get all signature links for inspection' })
+  async getSignatureLinks(@Param('id') id: string) {
+    return this.signatureLinkService.getInspectionSignatureLinks(BigInt(id));
+  }
+
+  @Delete(':id/signature-links')
+  @ApiOperation({ summary: 'Revoke all signature links for inspection' })
+  @OwnerPermission('inspections', OwnerAction.EDIT)
+  async revokeAllSignatureLinks(@Param('id') id: string) {
+    await this.signatureLinkService.revokeAllInspectionLinks(BigInt(id));
+    return { message: 'Todos os links de assinatura foram revogados' };
+  }
+
+  // ==================== Audit Log ====================
+
+  @Get(':id/audit-log')
+  @ApiOperation({ summary: 'Get audit log for inspection' })
+  async getAuditLog(@Param('id') id: string) {
+    return this.signatureService.getAuditLog(id);
   }
 }

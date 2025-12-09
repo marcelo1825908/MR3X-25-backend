@@ -180,6 +180,30 @@ export class PropertiesController {
 
   // ==================== End Property Images Routes ====================
 
+  // ==================== Property Assignment Routes ====================
+
+  @Put(':id/assign-broker')
+  @ApiOperation({ summary: 'Assign a broker to a property' })
+  async assignBroker(
+    @Param('id') id: string,
+    @Body() data: { brokerId: string | null },
+    @CurrentUser() user: any,
+  ) {
+    return this.propertiesService.assignBroker(id, data.brokerId, user);
+  }
+
+  @Put(':id/assign-tenant')
+  @ApiOperation({ summary: 'Assign a tenant to a property' })
+  async assignTenant(
+    @Param('id') id: string,
+    @Body() data: { tenantId?: string | null },
+    @CurrentUser() user: any,
+  ) {
+    return this.propertiesService.assignTenant(id, data, user);
+  }
+
+  // ==================== End Property Assignment Routes ====================
+
   @Get(':id')
   @ApiOperation({ summary: 'Get property by ID' })
   async findOne(@Param('id') id: string) {

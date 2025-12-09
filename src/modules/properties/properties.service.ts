@@ -221,4 +221,74 @@ export class PropertiesService {
     });
     return property?.isFrozen ?? false;
   }
+
+  /**
+   * Assign a broker to a property
+   */
+  async assignBroker(propertyId: string, brokerId: string | null, user: any) {
+    const property = await this.prisma.property.findUnique({
+      where: { id: BigInt(propertyId) },
+      select: { id: true, deleted: true, isFrozen: true, frozenReason: true, agencyId: true },
+    });
+
+    if (!property || property.deleted) {
+      throw new NotFoundException('Property not found');
+    }
+
+    if (property.isFrozen) {
+      throw new ForbiddenException(
+        property.frozenReason || 'Este imóvel está congelado. Faça upgrade do seu plano.'
+      );
+    }
+
+    const updated = await this.prisma.property.update({
+      where: { id: BigInt(propertyId) },
+      data: {
+        brokerId: brokerId ? BigInt(brokerId) : null,
+      },
+      include: {
+        owner: { select: { id: true, name: true, email: true } },
+        tenant: { select: { id: true, name: true, email: true } },
+        broker: { select: { id: true, name: true, email: true } },
+        agency: { select: { id: true, name: true } },
+      },
+    });
+
+    return this.serializeProperty(updated);
+  }
+
+  /**
+   * Assign a tenant to a property
+   */
+  async assignTenant(propertyId: string, data: { tenantId?: string | null }, user: any) {
+    const property = await this.prisma.property.findUnique({
+      where: { id: BigInt(propertyId) },
+      select: { id: true, deleted: true, isFrozen: true, frozenReason: true },
+    });
+
+    if (!property || property.deleted) {
+      throw new NotFoundException('Property not found');
+    }
+
+    if (property.isFrozen) {
+      throw new ForbiddenException(
+        property.frozenReason || 'Este imóvel está congelado. Faça upgrade do seu plano.'
+      );
+    }
+
+    const updated = await this.prisma.property.update({
+      where: { id: BigInt(propertyId) },
+      data: {
+        tenantId: data.tenantId ? BigInt(data.tenantId) : null,
+      },
+      include: {
+        owner: { select: { id: true, name: true, email: true } },
+        tenant: { select: { id: true, name: true, email: true } },
+        broker: { select: { id: true, name: true, email: true } },
+        agency: { select: { id: true, name: true } },
+      },
+    });
+
+    return this.serializeProperty(updated);
+  }
 }
