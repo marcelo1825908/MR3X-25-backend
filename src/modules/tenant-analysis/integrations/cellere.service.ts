@@ -65,6 +65,11 @@ export interface BackgroundCheckResponse {
     creditor: string;
     status: string;
     date?: string;
+    city?: string;
+    state?: string;
+    type?: string;
+    protocol?: string;
+    source?: string;
   }>;
   totalProtestValue?: number;
   hasArrestWarrants?: boolean;
@@ -75,6 +80,12 @@ export interface BackgroundCheckResponse {
     dataExpedicao: string;
   }>;
   status?: 'CLEAR' | 'WARNING' | 'CRITICAL';
+  infoSimplesData?: {
+    source: string;
+    consultationProtocol?: string;
+    consultationDate?: string;
+    cartoriosWithProtests?: number;
+  };
 }
 
 export interface DocumentValidationResponse {

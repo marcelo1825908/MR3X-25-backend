@@ -4,13 +4,12 @@ import { TenantAnalysisController } from './tenant-analysis.controller';
 import { TenantAnalysisService } from './tenant-analysis.service';
 import { CellereService } from './integrations/cellere.service';
 import { InfoSimplesService } from './integrations/infosimples.service';
-import { MockAnalysisService } from './services/mock-analysis.service';
 import { PrismaModule } from '../../config/prisma.module';
 
 @Module({
   imports: [PrismaModule, ConfigModule],
   controllers: [TenantAnalysisController],
-  providers: [TenantAnalysisService, CellereService, InfoSimplesService, MockAnalysisService],
-  exports: [TenantAnalysisService, CellereService, InfoSimplesService, MockAnalysisService],
+  providers: [TenantAnalysisService, CellereService, InfoSimplesService],
+  exports: [TenantAnalysisService, CellereService, InfoSimplesService],
 })
 export class TenantAnalysisModule {}

@@ -2,8 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../config/prisma.service';
 import { CellereService } from './integrations/cellere.service';
-import { InfoSimplesService, ProtestAnalysisResult } from './integrations/infosimples.service';
-import { MockAnalysisService } from './services/mock-analysis.service';
+import { InfoSimplesService } from './integrations/infosimples.service';
 import { AnalyzeTenantDto, AnalysisType, GetAnalysisHistoryDto } from './dto';
 import { TenantAnalysisStatus, RiskLevel } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
@@ -11,24 +10,15 @@ import { v4 as uuidv4 } from 'uuid';
 @Injectable()
 export class TenantAnalysisService {
   private readonly logger = new Logger(TenantAnalysisService.name);
-  private readonly useMockData: boolean;
   private readonly analysisValidityDays: number;
 
   constructor(
     private prisma: PrismaService,
     private cellereService: CellereService,
     private infoSimplesService: InfoSimplesService,
-    private mockService: MockAnalysisService,
     private configService: ConfigService,
   ) {
-    // ConfigService returns strings from .env, need to parse boolean properly
-    const tenantAnalysisEnabled = this.configService.get<string>('TENANT_ANALYSIS_ENABLED', 'false');
-    this.useMockData = tenantAnalysisEnabled !== 'true';
     this.analysisValidityDays = this.configService.get<number>('TENANT_ANALYSIS_VALIDITY_DAYS', 30);
-
-    if (this.useMockData) {
-      this.logger.warn('Tenant Analysis is using MOCK data. Set TENANT_ANALYSIS_ENABLED=true for real API.');
-    }
   }
 
   /**
@@ -406,10 +396,6 @@ export class TenantAnalysisService {
   }
 
   private async getFinancialAnalysis(document: string) {
-    if (this.useMockData) {
-      return this.mockService.getFinancialAnalysis(document);
-    }
-
     return this.cellereService.getFinancialAnalysis({
       document,
       includeScore: true,
@@ -419,18 +405,12 @@ export class TenantAnalysisService {
   }
 
   private async getBackgroundAnalysis(document: string) {
-    let baseBackground;
-
-    if (this.useMockData) {
-      baseBackground = await this.mockService.getBackgroundCheck(document);
-    } else {
-      baseBackground = await this.cellereService.getBackgroundCheck({
-        document,
-        includeCriminal: true,
-        includeJudicial: true,
-        includeProtests: true,
-      });
-    }
+    let baseBackground = await this.cellereService.getBackgroundCheck({
+      document,
+      includeCriminal: true,
+      includeJudicial: true,
+      includeProtests: true,
+    });
 
     // Enhance with InfoSimples CENPROT-SP protest data
     try {
@@ -492,11 +472,6 @@ export class TenantAnalysisService {
   }
 
   private async getDocumentValidation(document: string) {
-    if (this.useMockData) {
-      return this.mockService.getDocumentValidation(document);
-    }
-
-    // Use real Cellere API for document validation
     return this.cellereService.getDocumentValidation(document);
   }
 
@@ -817,19 +792,9 @@ export class TenantAnalysisService {
   }
 
   async healthCheck() {
-    if (this.useMockData) {
-      return {
-        status: 'healthy',
-        mode: 'mock',
-        service: 'Mock Analysis Service',
-        timestamp: new Date().toISOString(),
-      };
-    }
-
     const isHealthy = await this.cellereService.healthCheck();
     return {
       status: isHealthy ? 'healthy' : 'unhealthy',
-      mode: 'live',
       service: 'Cellere API',
       timestamp: new Date().toISOString(),
     };
