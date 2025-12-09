@@ -64,10 +64,12 @@ export class PropertiesController {
     // - CEO: sees ALL properties
     // - ADMIN: sees only properties they created
     // - INDEPENDENT_OWNER: sees only properties they created (no agencyId)
+    // - PROPRIETARIO: sees only properties where they are the owner (ownerId)
     // - Agency roles (AGENCY_OWNER, AGENCY_ADMIN, AGENCY_MANAGER, etc.): sees only properties of their agency
 
     let createdById: string | undefined;
     let effectiveAgencyId: string | undefined = agencyId;
+    let effectiveOwnerId: string | undefined = ownerId;
 
     if (user?.role === 'CEO') {
       // CEO sees all - no filtering
@@ -77,6 +79,9 @@ export class PropertiesController {
     } else if (user?.role === 'INDEPENDENT_OWNER') {
       // INDEPENDENT_OWNER sees only their own properties (created by them)
       createdById = user.sub;
+    } else if (user?.role === 'PROPRIETARIO') {
+      // PROPRIETARIO sees only properties where they are the owner
+      effectiveOwnerId = user.sub;
     } else if (user?.agencyId) {
       // Agency users see only their agency's properties
       effectiveAgencyId = user.agencyId;
@@ -85,7 +90,7 @@ export class PropertiesController {
       createdById = user?.sub;
     }
 
-    return this.propertiesService.findAll({ skip, take, agencyId: effectiveAgencyId, status, ownerId, createdById });
+    return this.propertiesService.findAll({ skip, take, agencyId: effectiveAgencyId, status, ownerId: effectiveOwnerId, createdById });
   }
 
   // ==================== Property Images Routes ====================
