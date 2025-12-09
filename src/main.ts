@@ -4,8 +4,6 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { Request, Response, NextFunction } from 'express';
 
-// Add BigInt serialization support for JSON.stringify
-// This is needed because Prisma returns BigInt for MySQL BIGINT columns
 (BigInt.prototype as any).toJSON = function () {
   return this.toString();
 };
@@ -13,7 +11,6 @@ import { Request, Response, NextFunction } from 'express';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Explicit OPTIONS handler MUST be first - before CORS and everything else
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.method === 'OPTIONS') {
       res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
@@ -26,9 +23,8 @@ async function bootstrap() {
     next();
   });
 
-  // CORS configuration - Allow all origins with proper preflight handling
   app.enableCors({
-    origin: true, // Allow all origins
+    origin: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
     allowedHeaders: [
       'Content-Type',
@@ -40,18 +36,16 @@ async function bootstrap() {
       'Access-Control-Request-Headers',
     ],
     exposedHeaders: ['Authorization'],
-    credentials: true, // Allow credentials (cookies, authorization headers)
-    maxAge: 86400, // Cache preflight requests for 24 hours
+    credentials: true,
+    maxAge: 86400,
     preflightContinue: false,
     optionsSuccessStatus: 204,
   });
-  
+
   console.log('✅ CORS enabled - allowing all origins');
 
-  // Global prefix
   app.setGlobalPrefix('api');
 
-  // Global validation pipe
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -63,7 +57,6 @@ async function bootstrap() {
     }),
   );
 
-  // Swagger documentation
   const config = new DocumentBuilder()
     .setTitle('MR3X Rental Management API')
     .setDescription('API documentation for MR3X Rental Management System')
@@ -74,7 +67,7 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, document);
 
   const port = process.env.PORT || 8081;
-  await app.listen(port, '0.0.0.0'); // Listen on all interfaces for Railway
+  await app.listen(port, '0.0.0.0');
   console.log(`✅ Application is running on port ${port}`);
   console.log(`✅ CORS enabled - allowing all origins`);
   console.log(`📚 Swagger docs: http://localhost:${port}/api/docs`);

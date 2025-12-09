@@ -20,7 +20,6 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
-    // Check if email already exists
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -29,10 +28,8 @@ export class AuthService {
       throw new ConflictException('Email already registered');
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
-    // Create user
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
@@ -46,7 +43,6 @@ export class AuthService {
       },
     });
 
-    // Generate verification code
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
     const codeHash = await bcrypt.hash(verificationCode, 10);
 
@@ -56,11 +52,10 @@ export class AuthService {
         email: dto.email,
         codeHash,
         purpose: 'register',
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
       },
     });
 
-    // TODO: Send email with verification code
     console.log(`Verification code for ${dto.email}: ${verificationCode}`);
 
     return {
@@ -90,13 +85,11 @@ export class AuthService {
       throw new UnauthorizedException('Account is inactive');
     }
 
-    // Update last login
     await this.prisma.user.update({
       where: { id: user.id },
       data: { lastLogin: new Date() },
     });
 
-    // Generate tokens
     const payload = {
       sub: user.id.toString(),
       email: user.email,
@@ -107,12 +100,11 @@ export class AuthService {
     const accessToken = this.jwtService.sign(payload);
     const refreshToken = uuidv4();
 
-    // Store refresh token
     await this.prisma.refreshToken.create({
       data: {
         token: refreshToken,
         userId: user.id,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       },
     });
 
@@ -135,7 +127,6 @@ export class AuthService {
   async verifyEmailRequest(dto: VerifyEmailRequestDto) {
     const email = dto.email.toLowerCase();
 
-    // Cooldown: if a recent record exists, block
     const recent = await this.prisma.emailVerification.findFirst({
       where: {
         email,
@@ -152,7 +143,6 @@ export class AuthService {
       };
     }
 
-    // Generate new verification code
     const code = this.generateNumericCode();
     const requestId = uuidv4();
     const expiresAt = new Date(Date.now() + EMAIL_CODE_TTL_MS);
@@ -167,10 +157,8 @@ export class AuthService {
       },
     });
 
-    // TODO: Send email with verification code
     console.log(`Verification code for ${email}: ${code}`);
 
-    // DEV ONLY: Include code in response for testing (REMOVE IN PRODUCTION)
     return {
       requestId,
       expiresAt,
@@ -206,7 +194,6 @@ export class AuthService {
       throw new BadRequestException('Invalid code');
     }
 
-    // Issue short-lived registration token embedding the verified email
     const payload = {
       sub: '0',
       email: record.email,
@@ -224,15 +211,12 @@ export class AuthService {
     });
 
     if (!user) {
-      // Return success even if email not found (security)
       return { message: 'If the email exists, a reset code has been sent' };
     }
 
-    // Generate reset code
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
     const codeHash = await bcrypt.hash(resetCode, 10);
 
-    // Delete old reset codes
     await this.prisma.emailVerification.deleteMany({
       where: { email: dto.email, purpose: 'password-reset' },
     });
@@ -247,7 +231,6 @@ export class AuthService {
       },
     });
 
-    // TODO: Send email with reset code
     console.log(`Password reset code for ${dto.email}: ${resetCode}`);
 
     return { message: 'If the email exists, a reset code has been sent' };
@@ -274,22 +257,18 @@ export class AuthService {
       throw new BadRequestException('Invalid reset code');
     }
 
-    // Hash new password
     const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
 
-    // Update password
     await this.prisma.user.update({
       where: { email: dto.email },
       data: { password: hashedPassword },
     });
 
-    // Mark verification as used
     await this.prisma.emailVerification.update({
       where: { id: verification.id },
       data: { usedAt: new Date() },
     });
 
-    // Revoke all refresh tokens for security
     await this.prisma.refreshToken.updateMany({
       where: { user: { email: dto.email } },
       data: { isRevoked: true },
@@ -327,7 +306,6 @@ export class AuthService {
   }
 
   async completeRegistration(dto: CompleteRegisterDto) {
-    // Verify registration token by reading email from it
     let email: string | undefined;
     try {
       const payload = JSON.parse(
@@ -342,11 +320,6 @@ export class AuthService {
       throw new BadRequestException('Invalid registration token');
     }
 
-    // Self-registration is only allowed for AGENCY_ADMIN and INDEPENDENT_OWNER
-    // Per MR3X Hierarchy Requirements:
-    // - AGENCY_ADMIN: Self-registers and creates their own agency
-    // - INDEPENDENT_OWNER: Self-registers as "mini real estate agency"
-    // - All other roles must be created by authorized users
     const ALLOWED_SELF_REGISTRATION_ROLES: UserRole[] = [UserRole.AGENCY_ADMIN, UserRole.INDEPENDENT_OWNER];
     if (!ALLOWED_SELF_REGISTRATION_ROLES.includes(dto.role)) {
       throw new BadRequestException(
@@ -365,7 +338,6 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
-    // For AGENCY_ADMIN: Create agency first, then link user to it
     let agencyId: bigint | undefined = undefined;
 
     if (dto.role === UserRole.AGENCY_ADMIN) {
@@ -373,7 +345,6 @@ export class AuthService {
         throw new BadRequestException('Agency name and CNPJ are required for agency owners');
       }
 
-      // Check if agency with this CNPJ already exists
       const cleanCnpj = dto.agencyCnpj.replace(/\D/g, '');
       const existingAgency = await this.prisma.agency.findUnique({
         where: { cnpj: cleanCnpj },
@@ -383,7 +354,6 @@ export class AuthService {
         throw new ConflictException('Agency with this CNPJ already exists');
       }
 
-      // Determine plan-based limits
       const planLimits: Record<string, { maxProperties: number; maxUsers: number }> = {
         FREE: { maxProperties: 5, maxUsers: 3 },
         ESSENTIAL: { maxProperties: 50, maxUsers: 10 },
@@ -393,7 +363,6 @@ export class AuthService {
 
       const limits = planLimits[dto.plan] || planLimits['FREE'];
 
-      // Create agency using user's information
       const agency = await this.prisma.agency.create({
         data: {
           name: dto.agencyName,
@@ -414,7 +383,6 @@ export class AuthService {
       agencyId = agency.id;
     }
 
-    // Create user account
     const user = await this.prisma.user.create({
       data: {
         email,
