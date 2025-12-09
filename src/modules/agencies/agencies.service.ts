@@ -76,7 +76,7 @@ export class AgenciesService {
         zipCode: data.zipCode || null,
         plan: planName,
         status: 'ACTIVE',
-        maxProperties: planLimits.properties, // Use plan limits
+        maxProperties: planLimits.contracts, // Use contract-based plan limits
         maxUsers: planLimits.users, // Use plan limits
         agencyFee: data.agencyFee ?? 8,
         apiEnabled: planLimits.apiAccess,
@@ -305,7 +305,7 @@ export class AgenciesService {
           zipCode: data.zipCode,
           plan: data.plan,
           status: data.status,
-          maxProperties: newPlanLimits.properties,
+          maxProperties: newPlanLimits.contracts,
           maxUsers: newPlanLimits.users,
           agencyFee: data.agencyFee !== undefined ? Math.max(0, Math.min(100, data.agencyFee)) : undefined,
           lastPlanChange: new Date(),
@@ -497,10 +497,10 @@ export class AgenciesService {
   }
 
   /**
-   * Switch active property for FREE plan (only 1 property allowed)
+   * Switch active contract for FREE plan (only 1 contract allowed)
    */
-  async switchActiveProperty(agencyId: string, newActivePropertyId: string) {
-    return this.planEnforcement.switchActiveProperty(agencyId, newActivePropertyId);
+  async switchActiveContract(agencyId: string, newActiveContractId: string) {
+    return this.planEnforcement.switchActiveContract(agencyId, newActiveContractId);
   }
 
   /**
@@ -520,10 +520,10 @@ export class AgenciesService {
   }
 
   /**
-   * Check if property creation is allowed for the agency
+   * Check if contract creation is allowed for the agency
    */
-  async checkPropertyCreationAllowed(agencyId: string) {
-    return this.planEnforcement.checkPropertyOperationAllowed(agencyId, 'create');
+  async checkContractCreationAllowed(agencyId: string) {
+    return this.planEnforcement.checkContractOperationAllowed(agencyId, 'create');
   }
 
   /**

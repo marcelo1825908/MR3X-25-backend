@@ -80,11 +80,13 @@ model Agency {
   lastPlanChange        DateTime? @map("last_plan_change") @db.Timestamp(0)
   frozenPropertiesCount Int       @default(0) @map("frozen_properties_count")
   frozenUsersCount      Int       @default(0) @map("frozen_users_count")
+  frozenContractsCount  Int       @default(0) @map("frozen_contracts_count")
 
   activeContractsCount  Int @default(0) @map("active_contracts_count")
   activePropertiesCount Int @default(0) @map("active_properties_count")
   activeUsersCount      Int @default(0) @map("active_users_count")
 
+  // Subscription Management
   subscriptionId     String?   @map("subscription_id") @db.VarChar(100)
   subscriptionStatus String?   @default("ACTIVE") @map("subscription_status") @db.VarChar(30)
   currentPeriodStart DateTime? @map("current_period_start") @db.Date
@@ -93,9 +95,27 @@ model Agency {
   trialEndsAt        DateTime? @map("trial_ends_at") @db.Timestamp(0)
   canceledAt         DateTime? @map("canceled_at") @db.Timestamp(0)
 
+  // Payment Tracking
   lastPaymentAt     DateTime? @map("last_payment_at") @db.Timestamp(0)
   lastPaymentAmount Decimal?  @map("last_payment_amount") @db.Decimal(10, 2)
   totalSpent        Decimal   @default(0) @map("total_spent") @db.Decimal(12, 2)
+
+  // API Add-on Subscription (Optional for PROFESSIONAL plan)
+  apiAddOnEnabled      Boolean   @default(false) @map("api_addon_enabled")
+  apiAddOnPrice        Decimal?  @default(29.00) @map("api_addon_price") @db.Decimal(10, 2)
+  apiAddOnSubscription String?   @map("api_addon_subscription") @db.VarChar(100)
+  apiAddOnStartDate    DateTime? @map("api_addon_start_date") @db.Date
+  apiAddOnEndDate      DateTime? @map("api_addon_end_date") @db.Date
+
+  // Monthly Usage Tracking (for microtransactions)
+  monthlyInspectionsUsed  Int      @default(0) @map("monthly_inspections_used")
+  monthlySettlementsUsed  Int      @default(0) @map("monthly_settlements_used")
+  monthlyScreeningsUsed   Int      @default(0) @map("monthly_screenings_used")
+  monthlyApiCallsUsed     Int      @default(0) @map("monthly_api_calls_used")
+  usageResetDate          DateTime? @map("usage_reset_date") @db.Date
+
+  // Support Tier
+  supportTier String @default("EMAIL") @map("support_tier") @db.VarChar(20)
 
   defaultEarlyTerminationPenaltyPercent Decimal? @default(3.0) @map("default_early_termination_penalty_percent") @db.Decimal(5, 2)
   defaultLateFeePercent                 Decimal? @default(2.0) @map("default_late_fee_percent") @db.Decimal(5, 2)
@@ -117,6 +137,7 @@ model Agency {
   invoices          Invoice[]
   serviceContracts  ServiceContract[]
   microtransactions Microtransaction[]
+  usageRecords      UsageRecord[]
 
   @@map("agencies")
 }
@@ -405,6 +426,12 @@ model Contract {
   deletedBy BigInt?   @map("deleted_by") @db.UnsignedBigInt
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
   updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  // Contract Freezing for Plan Limits
+  isFrozen       Boolean   @default(false) @map("is_frozen")
+  frozenAt       DateTime? @map("frozen_at") @db.Timestamp(0)
+  frozenReason   String?   @map("frozen_reason") @db.VarChar(255)
+  previousStatus String?   @map("previous_status") @db.VarChar(20)
 
   property      Property @relation(fields: [propertyId], references: [id])
   agency        Agency?  @relation(fields: [agencyId], references: [id])
@@ -1526,4 +1553,90 @@ model Microtransaction {
   @@index([status])
   @@index([createdAt])
   @@map("microtransactions")
+}
+
+// Usage tracking for billing and analytics
+model UsageRecord {
+  id       BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+  agencyId BigInt @map("agency_id") @db.UnsignedBigInt
+
+  // Usage type matches microtransaction types
+  type        String   @db.VarChar(50)
+  quantity    Int      @default(1)
+  unitPrice   Decimal  @map("unit_price") @db.Decimal(10, 2)
+  totalAmount Decimal  @map("total_amount") @db.Decimal(10, 2)
+
+  // Billing period
+  billingMonth String @map("billing_month") @db.VarChar(7) // Format: YYYY-MM
+  plan         String @db.VarChar(20)
+
+  // Payment status
+  billed   Boolean   @default(false)
+  billedAt DateTime? @map("billed_at") @db.Timestamp(0)
+  paidAt   DateTime? @map("paid_at") @db.Timestamp(0)
+
+  // Reference to specific entity
+  referenceId   BigInt? @map("reference_id") @db.UnsignedBigInt
+  referenceType String? @map("reference_type") @db.VarChar(50)
+
+  notes     String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+
+  agency Agency @relation(fields: [agencyId], references: [id])
+
+  @@index([agencyId])
+  @@index([billingMonth])
+  @@index([type])
+  @@index([billed])
+  @@map("usage_records")
+}
+
+// Subscription Plans Configuration (stored in database for dynamic pricing)
+model SubscriptionPlan {
+  id          BigInt  @id @default(autoincrement()) @db.UnsignedBigInt
+  name        String  @unique @db.VarChar(50)
+  displayName String  @map("display_name") @db.VarChar(100)
+  description String? @db.Text
+
+  // Pricing
+  monthlyPrice Decimal @map("monthly_price") @db.Decimal(10, 2)
+
+  // Contract-based limits (primary limit)
+  maxActiveContracts Int @map("max_active_contracts")
+  maxInternalUsers   Int @map("max_internal_users")
+
+  // Feature flags
+  unlimitedInspections Boolean @default(false) @map("unlimited_inspections")
+  unlimitedSettlements Boolean @default(false) @map("unlimited_settlements")
+  unlimitedUsers       Boolean @default(false) @map("unlimited_users")
+  apiAccessIncluded    Boolean @default(false) @map("api_access_included")
+  apiAccessOptional    Boolean @default(false) @map("api_access_optional")
+  advancedReports      Boolean @default(false) @map("advanced_reports")
+  automations          Boolean @default(false) @map("automations")
+  whiteLabel           Boolean @default(false) @map("white_label")
+  prioritySupport      Boolean @default(false) @map("priority_support")
+  support24x7          Boolean @default(false) @map("support_24x7")
+
+  // Pay-per-use pricing (varies by plan)
+  extraContractPrice     Decimal  @map("extra_contract_price") @db.Decimal(10, 2)
+  inspectionPrice        Decimal? @map("inspection_price") @db.Decimal(10, 2)
+  settlementPrice        Decimal? @map("settlement_price") @db.Decimal(10, 2)
+  screeningPrice         Decimal  @map("screening_price") @db.Decimal(10, 2)
+  apiAddOnPrice          Decimal? @map("api_addon_price") @db.Decimal(10, 2)
+
+  // Support tier
+  supportTier String @default("EMAIL") @map("support_tier") @db.VarChar(30)
+
+  // Display order and status
+  displayOrder Int     @default(0) @map("display_order")
+  isActive     Boolean @default(true) @map("is_active")
+  isPopular    Boolean @default(false) @map("is_popular")
+
+  // Features list (JSON array for display)
+  featuresJson String? @map("features_json") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  @@map("subscription_plans")
 }

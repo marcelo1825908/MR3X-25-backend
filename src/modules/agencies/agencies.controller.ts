@@ -64,13 +64,13 @@ export class AgenciesController {
     return this.agenciesService.previewPlanChange(id, newPlan);
   }
 
-  @Post(':id/switch-active-property')
-  @ApiOperation({ summary: 'Switch which property is active (for FREE plan with 1 property limit)' })
-  async switchActiveProperty(
+  @Post(':id/switch-active-contract')
+  @ApiOperation({ summary: 'Switch which contract is active (for FREE plan with 1 contract limit)' })
+  async switchActiveContract(
     @Param('id') id: string,
-    @Body() data: { newActivePropertyId: string },
+    @Body() data: { newActiveContractId: string },
   ) {
-    return this.agenciesService.switchActiveProperty(id, data.newActivePropertyId);
+    return this.agenciesService.switchActiveContract(id, data.newActiveContractId);
   }
 
   @Post(':id/enforce-plan')
@@ -79,10 +79,10 @@ export class AgenciesController {
     return this.agenciesService.enforcePlanLimits(id);
   }
 
-  @Get(':id/check-property-creation')
-  @ApiOperation({ summary: 'Check if property creation is allowed for the agency' })
-  async checkPropertyCreationAllowed(@Param('id') id: string) {
-    return this.agenciesService.checkPropertyCreationAllowed(id);
+  @Get(':id/check-contract-creation')
+  @ApiOperation({ summary: 'Check if contract creation is allowed for the agency' })
+  async checkContractCreationAllowed(@Param('id') id: string) {
+    return this.agenciesService.checkContractCreationAllowed(id);
   }
 
   @Get(':id/check-user-creation')

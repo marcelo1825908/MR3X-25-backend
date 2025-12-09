@@ -91,17 +91,22 @@ export class ContractsService {
   }
 
   async create(data: any, userId: string, userAgencyId?: string) {
-    // Check if the property is frozen
-    const propertyCheck = await this.planEnforcement.checkContractOperationAllowed(data.propertyId);
-    if (!propertyCheck.allowed) {
-      throw new ForbiddenException(propertyCheck.message || PLAN_MESSAGES.CONTRACT_ON_FROZEN_PROPERTY);
-    }
-
     // Get property to auto-populate ownerId and agencyId
     const property = await this.prisma.property.findUnique({
       where: { id: BigInt(data.propertyId) },
       select: { ownerId: true, agencyId: true },
     });
+
+    // Determine agencyId for plan check
+    const checkAgencyId = data.agencyId || property?.agencyId?.toString() || userAgencyId;
+
+    // Check if the agency can create more contracts based on plan limits
+    if (checkAgencyId) {
+      const contractCheck = await this.planEnforcement.checkContractOperationAllowed(checkAgencyId, 'create');
+      if (!contractCheck.allowed) {
+        throw new ForbiddenException(contractCheck.message || PLAN_MESSAGES.CREATE_CONTRACT_BLOCKED);
+      }
+    }
 
     // Determine ownerId: from data, from property, or null
     let ownerId = data.ownerId ? BigInt(data.ownerId) : null;

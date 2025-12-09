@@ -81,16 +81,7 @@ export class PropertiesService {
       throw new ForbiddenException(planCheck.message || 'Você atingiu o limite de imóveis do seu plano.');
     }
 
-    // Check agency plan limits if agencyId is available
-    if (agencyId) {
-      const agencyCheck = await this.planEnforcement.checkPropertyOperationAllowed(
-        agencyId,
-        'create',
-      );
-      if (!agencyCheck.allowed) {
-        throw new ForbiddenException(agencyCheck.message || 'A agência atingiu o limite de imóveis do plano.');
-      }
-    }
+    // Note: Property creation is no longer limited by plan - only contract limits apply
 
     // Generate unique MR3X token for the property
     const token = await this.tokenGenerator.generateToken(TokenEntityType.PROPERTY);
@@ -135,7 +126,7 @@ export class PropertiesService {
     // Check if property is frozen
     if (property.isFrozen) {
       throw new ForbiddenException(
-        property.frozenReason || PLAN_MESSAGES.EDIT_FROZEN_PROPERTY
+        property.frozenReason || 'Este imóvel está congelado. Faça upgrade do seu plano.'
       );
     }
 
@@ -224,6 +215,10 @@ export class PropertiesService {
    * Check if a property is frozen
    */
   async isPropertyFrozen(propertyId: string): Promise<boolean> {
-    return this.planEnforcement.isPropertyFrozen(propertyId);
+    const property = await this.prisma.property.findUnique({
+      where: { id: BigInt(propertyId) },
+      select: { isFrozen: true },
+    });
+    return property?.isFrozen ?? false;
   }
 }
