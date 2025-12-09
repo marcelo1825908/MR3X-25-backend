@@ -50,8 +50,12 @@ export interface UnfreezeResult {
 export interface EnforcementResult {
   contractsFrozen: number;
   usersFrozen: number;
+  propertiesFrozen: number;
+  tenantsFrozen: number;
   contractsUnfrozen: number;
   usersUnfrozen: number;
+  propertiesUnfrozen: number;
+  tenantsUnfrozen: number;
   message: string;
 }
 
@@ -590,35 +594,63 @@ export class PlanEnforcementService {
     let result: EnforcementResult = {
       contractsFrozen: 0,
       usersFrozen: 0,
+      propertiesFrozen: 0,
+      tenantsFrozen: 0,
       contractsUnfrozen: 0,
       usersUnfrozen: 0,
+      propertiesUnfrozen: 0,
+      tenantsUnfrozen: 0,
       message: '',
     };
 
-    // Downgrade scenario: freeze excess entities
-    if (newConfig.maxActiveContracts < oldConfig.maxActiveContracts ||
-        (newConfig.maxInternalUsers !== -1 && newConfig.maxInternalUsers < (oldConfig.maxInternalUsers === -1 ? 9999 : oldConfig.maxInternalUsers))) {
+    // Check if downgrading any limit
+    const isDowngrade =
+      newConfig.maxActiveContracts < oldConfig.maxActiveContracts ||
+      newConfig.maxProperties < oldConfig.maxProperties ||
+      newConfig.maxTenants < oldConfig.maxTenants ||
+      (newConfig.maxInternalUsers !== -1 && newConfig.maxInternalUsers < (oldConfig.maxInternalUsers === -1 ? 9999 : oldConfig.maxInternalUsers));
 
+    // Check if upgrading any limit
+    const isUpgrade =
+      newConfig.maxActiveContracts > oldConfig.maxActiveContracts ||
+      newConfig.maxProperties > oldConfig.maxProperties ||
+      newConfig.maxTenants > oldConfig.maxTenants ||
+      (newConfig.maxInternalUsers === -1 || newConfig.maxInternalUsers > (oldConfig.maxInternalUsers === -1 ? 9999 : oldConfig.maxInternalUsers));
+
+    // Downgrade scenario: freeze excess entities
+    if (isDowngrade) {
       // Freeze excess contracts
       const contractResult = await this.freezeExcessContracts(agencyId, newConfig.maxActiveContracts);
       result.contractsFrozen = contractResult.frozen;
 
-      // Freeze excess users
+      // Freeze excess users (internal)
       const userLimit = newConfig.maxInternalUsers === -1 ? 9999 : newConfig.maxInternalUsers;
       const userResult = await this.freezeExcessUsers(agencyId, userLimit);
       result.usersFrozen = userResult.frozen;
+
+      // Freeze excess properties
+      const propertyResult = await this.freezeExcessProperties(agencyId, newConfig.maxProperties);
+      result.propertiesFrozen = propertyResult.frozen;
+
+      // Freeze excess tenants
+      const tenantResult = await this.freezeExcessTenants(agencyId, newConfig.maxTenants);
+      result.tenantsFrozen = tenantResult.frozen;
 
       // Disable API access if downgrading to a plan without API
       if (!newConfig.apiAccessIncluded && !newConfig.apiAccessOptional) {
         await this.disableApiAccess(agencyId);
       }
 
-      result.message = `Plano alterado de ${oldConfig.displayName} para ${newConfig.displayName}. ${result.contractsFrozen} contrato(s) e ${result.usersFrozen} usuário(s) foram congelados.`;
+      const frozen: string[] = [];
+      if (result.contractsFrozen > 0) frozen.push(`${result.contractsFrozen} contrato(s)`);
+      if (result.usersFrozen > 0) frozen.push(`${result.usersFrozen} usuário(s)`);
+      if (result.propertiesFrozen > 0) frozen.push(`${result.propertiesFrozen} imóvel(is)`);
+      if (result.tenantsFrozen > 0) frozen.push(`${result.tenantsFrozen} inquilino(s)`);
+
+      result.message = `Plano alterado de ${oldConfig.displayName} para ${newConfig.displayName}. ${frozen.length > 0 ? frozen.join(', ') + ' foram congelados.' : 'Nenhuma entidade foi congelada.'}`;
     }
     // Upgrade scenario: unfreeze entities up to new limit
-    else if (newConfig.maxActiveContracts > oldConfig.maxActiveContracts ||
-             (newConfig.maxInternalUsers === -1 || newConfig.maxInternalUsers > (oldConfig.maxInternalUsers === -1 ? 9999 : oldConfig.maxInternalUsers))) {
-
+    else if (isUpgrade) {
       // Unfreeze contracts up to new limit
       const contractResult = await this.unfreezeContracts(agencyId, newConfig.maxActiveContracts);
       result.contractsUnfrozen = contractResult.unfrozen;
@@ -628,12 +660,26 @@ export class PlanEnforcementService {
       const userResult = await this.unfreezeUsers(agencyId, userLimit);
       result.usersUnfrozen = userResult.unfrozen;
 
+      // Unfreeze properties up to new limit
+      const propertyResult = await this.unfreezeProperties(agencyId, newConfig.maxProperties);
+      result.propertiesUnfrozen = propertyResult.unfrozen;
+
+      // Unfreeze tenants up to new limit
+      const tenantResult = await this.unfreezeTenants(agencyId, newConfig.maxTenants);
+      result.tenantsUnfrozen = tenantResult.unfrozen;
+
       // Enable API access if upgrading to a plan with API
       if (newConfig.apiAccessIncluded) {
         await this.enableApiAccess(agencyId);
       }
 
-      result.message = `Upgrade realizado de ${oldConfig.displayName} para ${newConfig.displayName}. ${result.contractsUnfrozen} contrato(s) e ${result.usersUnfrozen} usuário(s) foram desbloqueados.`;
+      const unfrozen: string[] = [];
+      if (result.contractsUnfrozen > 0) unfrozen.push(`${result.contractsUnfrozen} contrato(s)`);
+      if (result.usersUnfrozen > 0) unfrozen.push(`${result.usersUnfrozen} usuário(s)`);
+      if (result.propertiesUnfrozen > 0) unfrozen.push(`${result.propertiesUnfrozen} imóvel(is)`);
+      if (result.tenantsUnfrozen > 0) unfrozen.push(`${result.tenantsUnfrozen} inquilino(s)`);
+
+      result.message = `Upgrade realizado de ${oldConfig.displayName} para ${newConfig.displayName}. ${unfrozen.length > 0 ? unfrozen.join(', ') + ' foram desbloqueados.' : 'Nenhuma entidade foi desbloqueada.'}`;
     }
     else {
       result.message = `Plano mantido em ${newConfig.displayName}. Nenhuma alteração necessária.`;
@@ -656,6 +702,95 @@ export class PlanEnforcementService {
 
     // Log the enforcement action
     await this.logEnforcementAction(agencyId, 'PLAN_CHANGED', result);
+
+    return result;
+  }
+
+  /**
+   * Enforce plan limits when independent owner plan changes
+   */
+  async enforcePlanLimitsForOwner(ownerId: string, newPlan: string): Promise<EnforcementResult> {
+    const owner = await this.prisma.user.findUnique({
+      where: { id: BigInt(ownerId) },
+      select: { id: true, plan: true, role: true },
+    });
+
+    if (!owner) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    const oldPlan = owner.plan || 'FREE';
+    const oldConfig = getPlanByName(oldPlan) || PLANS_CONFIG.FREE;
+    const newConfig = getPlanByName(newPlan) || PLANS_CONFIG.FREE;
+
+    let result: EnforcementResult = {
+      contractsFrozen: 0,
+      usersFrozen: 0,
+      propertiesFrozen: 0,
+      tenantsFrozen: 0,
+      contractsUnfrozen: 0,
+      usersUnfrozen: 0,
+      propertiesUnfrozen: 0,
+      tenantsUnfrozen: 0,
+      message: '',
+    };
+
+    // Check if downgrading any limit
+    const isDowngrade =
+      newConfig.maxProperties < oldConfig.maxProperties ||
+      newConfig.maxTenants < oldConfig.maxTenants;
+
+    // Check if upgrading any limit
+    const isUpgrade =
+      newConfig.maxProperties > oldConfig.maxProperties ||
+      newConfig.maxTenants > oldConfig.maxTenants;
+
+    // Downgrade scenario: freeze excess entities
+    if (isDowngrade) {
+      // Freeze excess properties
+      const propertyResult = await this.freezeExcessPropertiesForOwner(ownerId, newConfig.maxProperties);
+      result.propertiesFrozen = propertyResult.frozen;
+
+      // Freeze excess tenants
+      const tenantResult = await this.freezeExcessTenantsForOwner(ownerId, newConfig.maxTenants);
+      result.tenantsFrozen = tenantResult.frozen;
+
+      const frozen: string[] = [];
+      if (result.propertiesFrozen > 0) frozen.push(`${result.propertiesFrozen} imóvel(is)`);
+      if (result.tenantsFrozen > 0) frozen.push(`${result.tenantsFrozen} inquilino(s)`);
+
+      result.message = `Plano alterado de ${oldConfig.displayName} para ${newConfig.displayName}. ${frozen.length > 0 ? frozen.join(', ') + ' foram congelados.' : 'Nenhuma entidade foi congelada.'}`;
+    }
+    // Upgrade scenario: unfreeze entities up to new limit
+    else if (isUpgrade) {
+      // Unfreeze properties up to new limit
+      const propertyResult = await this.unfreezePropertiesForOwner(ownerId, newConfig.maxProperties);
+      result.propertiesUnfrozen = propertyResult.unfrozen;
+
+      // Unfreeze tenants up to new limit
+      const tenantResult = await this.unfreezeTenantsForOwner(ownerId, newConfig.maxTenants);
+      result.tenantsUnfrozen = tenantResult.unfrozen;
+
+      const unfrozen: string[] = [];
+      if (result.propertiesUnfrozen > 0) unfrozen.push(`${result.propertiesUnfrozen} imóvel(is)`);
+      if (result.tenantsUnfrozen > 0) unfrozen.push(`${result.tenantsUnfrozen} inquilino(s)`);
+
+      result.message = `Upgrade realizado de ${oldConfig.displayName} para ${newConfig.displayName}. ${unfrozen.length > 0 ? unfrozen.join(', ') + ' foram desbloqueados.' : 'Nenhuma entidade foi desbloqueada.'}`;
+    }
+    else {
+      result.message = `Plano mantido em ${newConfig.displayName}. Nenhuma alteração necessária.`;
+    }
+
+    // Update owner plan
+    await this.prisma.user.update({
+      where: { id: BigInt(ownerId) },
+      data: {
+        plan: newPlan,
+      },
+    });
+
+    // Log the enforcement action
+    await this.logEnforcementAction(ownerId, 'OWNER_PLAN_CHANGED', result);
 
     return result;
   }
@@ -902,6 +1037,454 @@ export class PlanEnforcementService {
     return {
       unfrozen: frozenUsers.length,
       message: `${frozenUsers.length} usuário(s) foram reativados.`,
+    };
+  }
+
+  /**
+   * Freeze properties exceeding the limit
+   * Keeps the most recently created properties active
+   */
+  async freezeExcessProperties(agencyId: string, limit: number): Promise<FreezeResult> {
+    // Get all active (non-frozen, non-deleted) properties for agency
+    const activeProperties = await this.prisma.property.findMany({
+      where: {
+        agencyId: BigInt(agencyId),
+        deleted: false,
+        isFrozen: false,
+      },
+      orderBy: { createdAt: 'desc' }, // Most recent first
+      select: {
+        id: true,
+        status: true,
+        address: true,
+        createdAt: true,
+      },
+    });
+
+    // If within limit, nothing to freeze
+    if (activeProperties.length <= limit) {
+      return {
+        frozen: 0,
+        kept: activeProperties.map(p => p.id.toString()),
+        message: 'Dentro do limite do plano',
+      };
+    }
+
+    // Keep the most recent 'limit' properties active
+    const toKeepActive = activeProperties.slice(0, limit);
+    const toFreeze = activeProperties.slice(limit);
+
+    // Freeze excess properties
+    const frozenIds: string[] = [];
+    for (const property of toFreeze) {
+      await this.prisma.property.update({
+        where: { id: property.id },
+        data: {
+          isFrozen: true,
+          frozenAt: new Date(),
+          frozenReason: PLAN_MESSAGES.CREATE_PROPERTY_BLOCKED.replace('{limit}', limit.toString()).replace('{plan}', ''),
+          previousStatus: property.status,
+        },
+      });
+      frozenIds.push(property.id.toString());
+    }
+
+    return {
+      frozen: toFreeze.length,
+      kept: toKeepActive.map(p => p.id.toString()),
+      message: `${toFreeze.length} imóvel(is) foram congelados devido ao limite do plano.`,
+    };
+  }
+
+  /**
+   * Freeze properties for independent owner exceeding the limit
+   */
+  async freezeExcessPropertiesForOwner(ownerId: string, limit: number): Promise<FreezeResult> {
+    // Get all active (non-frozen, non-deleted) properties for owner
+    const activeProperties = await this.prisma.property.findMany({
+      where: {
+        ownerId: BigInt(ownerId),
+        deleted: false,
+        isFrozen: false,
+      },
+      orderBy: { createdAt: 'desc' }, // Most recent first
+      select: {
+        id: true,
+        status: true,
+        address: true,
+        createdAt: true,
+      },
+    });
+
+    // If within limit, nothing to freeze
+    if (activeProperties.length <= limit) {
+      return {
+        frozen: 0,
+        kept: activeProperties.map(p => p.id.toString()),
+        message: 'Dentro do limite do plano',
+      };
+    }
+
+    // Keep the most recent 'limit' properties active
+    const toKeepActive = activeProperties.slice(0, limit);
+    const toFreeze = activeProperties.slice(limit);
+
+    // Freeze excess properties
+    for (const property of toFreeze) {
+      await this.prisma.property.update({
+        where: { id: property.id },
+        data: {
+          isFrozen: true,
+          frozenAt: new Date(),
+          frozenReason: PLAN_MESSAGES.CREATE_PROPERTY_BLOCKED.replace('{limit}', limit.toString()).replace('{plan}', ''),
+          previousStatus: property.status,
+        },
+      });
+    }
+
+    return {
+      frozen: toFreeze.length,
+      kept: toKeepActive.map(p => p.id.toString()),
+      message: `${toFreeze.length} imóvel(is) foram congelados devido ao limite do plano.`,
+    };
+  }
+
+  /**
+   * Unfreeze properties up to the new limit
+   */
+  async unfreezeProperties(agencyId: string, newLimit: number): Promise<UnfreezeResult> {
+    // Get current active properties count
+    const activeCount = await this.prisma.property.count({
+      where: {
+        agencyId: BigInt(agencyId),
+        deleted: false,
+        isFrozen: false,
+      },
+    });
+
+    // Calculate how many can be unfrozen
+    const canUnfreeze = Math.max(0, newLimit - activeCount);
+
+    if (canUnfreeze === 0) {
+      return {
+        unfrozen: 0,
+        message: 'Nenhum imóvel para descongelar.',
+      };
+    }
+
+    // Get frozen properties, oldest frozen first
+    const frozenProperties = await this.prisma.property.findMany({
+      where: {
+        agencyId: BigInt(agencyId),
+        deleted: false,
+        isFrozen: true,
+      },
+      orderBy: { frozenAt: 'asc' }, // Oldest frozen first
+      take: canUnfreeze,
+      select: { id: true, previousStatus: true },
+    });
+
+    // Unfreeze properties
+    for (const property of frozenProperties) {
+      await this.prisma.property.update({
+        where: { id: property.id },
+        data: {
+          isFrozen: false,
+          frozenAt: null,
+          frozenReason: null,
+          status: property.previousStatus || 'DISPONIVEL',
+          previousStatus: null,
+        },
+      });
+    }
+
+    return {
+      unfrozen: frozenProperties.length,
+      message: `${frozenProperties.length} imóvel(is) foram desbloqueados.`,
+    };
+  }
+
+  /**
+   * Unfreeze properties for independent owner up to the new limit
+   */
+  async unfreezePropertiesForOwner(ownerId: string, newLimit: number): Promise<UnfreezeResult> {
+    // Get current active properties count
+    const activeCount = await this.prisma.property.count({
+      where: {
+        ownerId: BigInt(ownerId),
+        deleted: false,
+        isFrozen: false,
+      },
+    });
+
+    // Calculate how many can be unfrozen
+    const canUnfreeze = Math.max(0, newLimit - activeCount);
+
+    if (canUnfreeze === 0) {
+      return {
+        unfrozen: 0,
+        message: 'Nenhum imóvel para descongelar.',
+      };
+    }
+
+    // Get frozen properties, oldest frozen first
+    const frozenProperties = await this.prisma.property.findMany({
+      where: {
+        ownerId: BigInt(ownerId),
+        deleted: false,
+        isFrozen: true,
+      },
+      orderBy: { frozenAt: 'asc' }, // Oldest frozen first
+      take: canUnfreeze,
+      select: { id: true, previousStatus: true },
+    });
+
+    // Unfreeze properties
+    for (const property of frozenProperties) {
+      await this.prisma.property.update({
+        where: { id: property.id },
+        data: {
+          isFrozen: false,
+          frozenAt: null,
+          frozenReason: null,
+          status: property.previousStatus || 'DISPONIVEL',
+          previousStatus: null,
+        },
+      });
+    }
+
+    return {
+      unfrozen: frozenProperties.length,
+      message: `${frozenProperties.length} imóvel(is) foram desbloqueados.`,
+    };
+  }
+
+  /**
+   * Freeze tenants exceeding the limit
+   * Keeps the most recently created tenants active
+   */
+  async freezeExcessTenants(agencyId: string, limit: number): Promise<FreezeResult> {
+    // If unlimited tenants (9999), nothing to freeze
+    if (limit >= 9999) {
+      return {
+        frozen: 0,
+        kept: [],
+        message: 'Inquilinos ilimitados no plano',
+      };
+    }
+
+    // Get all active (non-frozen) tenants for agency
+    const activeTenants = await this.prisma.user.findMany({
+      where: {
+        agencyId: BigInt(agencyId),
+        isFrozen: false,
+        status: 'ACTIVE',
+        role: UserRole.INQUILINO,
+      },
+      orderBy: { createdAt: 'desc' }, // Most recent first
+      select: { id: true, name: true, email: true, createdAt: true },
+    });
+
+    // If within limit, nothing to freeze
+    if (activeTenants.length <= limit) {
+      return {
+        frozen: 0,
+        kept: activeTenants.map(t => t.id.toString()),
+        message: 'Dentro do limite do plano',
+      };
+    }
+
+    // Keep the most recent 'limit' tenants active
+    const toKeepActive = activeTenants.slice(0, limit);
+    const toFreeze = activeTenants.slice(limit);
+
+    // Freeze excess tenants
+    for (const tenant of toFreeze) {
+      await this.prisma.user.update({
+        where: { id: tenant.id },
+        data: {
+          isFrozen: true,
+          frozenAt: new Date(),
+          frozenReason: PLAN_MESSAGES.CREATE_TENANT_BLOCKED.replace('{limit}', limit.toString()).replace('{plan}', ''),
+        },
+      });
+    }
+
+    return {
+      frozen: toFreeze.length,
+      kept: toKeepActive.map(t => t.id.toString()),
+      message: `${toFreeze.length} inquilino(s) foram congelados devido ao limite do plano.`,
+    };
+  }
+
+  /**
+   * Freeze tenants for independent owner exceeding the limit
+   */
+  async freezeExcessTenantsForOwner(ownerId: string, limit: number): Promise<FreezeResult> {
+    // If unlimited tenants (9999), nothing to freeze
+    if (limit >= 9999) {
+      return {
+        frozen: 0,
+        kept: [],
+        message: 'Inquilinos ilimitados no plano',
+      };
+    }
+
+    // Get all active (non-frozen) tenants created by this owner
+    const activeTenants = await this.prisma.user.findMany({
+      where: {
+        createdBy: BigInt(ownerId),
+        isFrozen: false,
+        status: 'ACTIVE',
+        role: UserRole.INQUILINO,
+      },
+      orderBy: { createdAt: 'desc' }, // Most recent first
+      select: { id: true, name: true, email: true, createdAt: true },
+    });
+
+    // If within limit, nothing to freeze
+    if (activeTenants.length <= limit) {
+      return {
+        frozen: 0,
+        kept: activeTenants.map(t => t.id.toString()),
+        message: 'Dentro do limite do plano',
+      };
+    }
+
+    // Keep the most recent 'limit' tenants active
+    const toKeepActive = activeTenants.slice(0, limit);
+    const toFreeze = activeTenants.slice(limit);
+
+    // Freeze excess tenants
+    for (const tenant of toFreeze) {
+      await this.prisma.user.update({
+        where: { id: tenant.id },
+        data: {
+          isFrozen: true,
+          frozenAt: new Date(),
+          frozenReason: PLAN_MESSAGES.CREATE_TENANT_BLOCKED.replace('{limit}', limit.toString()).replace('{plan}', ''),
+        },
+      });
+    }
+
+    return {
+      frozen: toFreeze.length,
+      kept: toKeepActive.map(t => t.id.toString()),
+      message: `${toFreeze.length} inquilino(s) foram congelados devido ao limite do plano.`,
+    };
+  }
+
+  /**
+   * Unfreeze tenants up to the new limit
+   */
+  async unfreezeTenants(agencyId: string, newLimit: number): Promise<UnfreezeResult> {
+    // If unlimited tenants (9999), unfreeze all
+    const effectiveLimit = newLimit >= 9999 ? 9999 : newLimit;
+
+    // Get current active tenants count
+    const activeCount = await this.prisma.user.count({
+      where: {
+        agencyId: BigInt(agencyId),
+        isFrozen: false,
+        status: 'ACTIVE',
+        role: UserRole.INQUILINO,
+      },
+    });
+
+    // Calculate how many can be unfrozen
+    const canUnfreeze = Math.max(0, effectiveLimit - activeCount);
+
+    if (canUnfreeze === 0 && effectiveLimit < 9999) {
+      return {
+        unfrozen: 0,
+        message: 'Nenhum inquilino para descongelar.',
+      };
+    }
+
+    // Get frozen tenants, oldest frozen first
+    const frozenTenants = await this.prisma.user.findMany({
+      where: {
+        agencyId: BigInt(agencyId),
+        isFrozen: true,
+        role: UserRole.INQUILINO,
+      },
+      orderBy: { frozenAt: 'asc' },
+      take: effectiveLimit >= 9999 ? undefined : canUnfreeze,
+      select: { id: true },
+    });
+
+    // Unfreeze tenants
+    for (const tenant of frozenTenants) {
+      await this.prisma.user.update({
+        where: { id: tenant.id },
+        data: {
+          isFrozen: false,
+          frozenAt: null,
+          frozenReason: null,
+        },
+      });
+    }
+
+    return {
+      unfrozen: frozenTenants.length,
+      message: `${frozenTenants.length} inquilino(s) foram reativados.`,
+    };
+  }
+
+  /**
+   * Unfreeze tenants for independent owner up to the new limit
+   */
+  async unfreezeTenantsForOwner(ownerId: string, newLimit: number): Promise<UnfreezeResult> {
+    // If unlimited tenants (9999), unfreeze all
+    const effectiveLimit = newLimit >= 9999 ? 9999 : newLimit;
+
+    // Get current active tenants count
+    const activeCount = await this.prisma.user.count({
+      where: {
+        createdBy: BigInt(ownerId),
+        isFrozen: false,
+        status: 'ACTIVE',
+        role: UserRole.INQUILINO,
+      },
+    });
+
+    // Calculate how many can be unfrozen
+    const canUnfreeze = Math.max(0, effectiveLimit - activeCount);
+
+    if (canUnfreeze === 0 && effectiveLimit < 9999) {
+      return {
+        unfrozen: 0,
+        message: 'Nenhum inquilino para descongelar.',
+      };
+    }
+
+    // Get frozen tenants, oldest frozen first
+    const frozenTenants = await this.prisma.user.findMany({
+      where: {
+        createdBy: BigInt(ownerId),
+        isFrozen: true,
+        role: UserRole.INQUILINO,
+      },
+      orderBy: { frozenAt: 'asc' },
+      take: effectiveLimit >= 9999 ? undefined : canUnfreeze,
+      select: { id: true },
+    });
+
+    // Unfreeze tenants
+    for (const tenant of frozenTenants) {
+      await this.prisma.user.update({
+        where: { id: tenant.id },
+        data: {
+          isFrozen: false,
+          frozenAt: null,
+          frozenReason: null,
+        },
+      });
+    }
+
+    return {
+      unfrozen: frozenTenants.length,
+      message: `${frozenTenants.length} inquilino(s) foram reativados.`,
     };
   }
 
