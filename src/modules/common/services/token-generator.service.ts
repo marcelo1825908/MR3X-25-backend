@@ -4,7 +4,7 @@ import { PrismaService } from '../../../config/prisma.service';
 export enum TokenEntityType {
   CONTRACT = 'CTR', // MR3X-CTR-YEAR-XXXX-XXXX
   PROPERTY = 'IMO', // MR3X-IMO-YEAR-XXXX-XXXX (Imóvel)
-  TENANT = 'LOC', // MR3X-LOC-YEAR-XXXX-XXXX (Locatário)
+  TENANT = 'INQ', // MR3X-INQ-YEAR-XXXX-XXXX (Inquilino)
   OWNER = 'PRO', // MR3X-PRO-YEAR-XXXX-XXXX (Proprietário)
   DOCUMENT = 'DOC', // MR3X-DOC-YEAR-XXXX-XXXX
   INVOICE = 'INV', // MR3X-INV-YEAR-XXXX-XXXX
@@ -172,7 +172,8 @@ export class TokenGeneratorService {
     const typeMap: { [key: string]: TokenEntityType } = {
       CTR: TokenEntityType.CONTRACT,
       IMO: TokenEntityType.PROPERTY,
-      LOC: TokenEntityType.TENANT,
+      INQ: TokenEntityType.TENANT,
+      LOC: TokenEntityType.TENANT, // Legacy support
       PRO: TokenEntityType.OWNER,
       DOC: TokenEntityType.DOCUMENT,
       INV: TokenEntityType.INVOICE,
