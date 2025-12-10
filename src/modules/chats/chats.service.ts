@@ -231,6 +231,81 @@ export class ChatsService {
   async getAvailableUsers(userId: string, role: string, userAgencyId?: string) {
     const userIdBigInt = BigInt(userId);
 
+    // CEO can chat with all ADMIN users
+    if (role === 'CEO') {
+      const adminUsers = await this.prisma.user.findMany({
+        where: {
+          id: { not: userIdBigInt },
+          role: 'ADMIN',
+          status: 'ACTIVE',
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      });
+
+      return adminUsers.map(u => ({
+        id: u.id.toString(),
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        role: u.role,
+      }));
+    }
+
+    // ADMIN can chat with AGENCY_ADMIN users they created and other relevant users
+    if (role === 'ADMIN') {
+      // Get users created by this admin (AGENCY_ADMIN, INDEPENDENT_OWNER, etc.)
+      const createdUsers = await this.prisma.user.findMany({
+        where: {
+          id: { not: userIdBigInt },
+          createdBy: userIdBigInt,
+          status: 'ACTIVE',
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      });
+
+      // Also get all AGENCY_ADMIN users (directors)
+      const agencyAdmins = await this.prisma.user.findMany({
+        where: {
+          id: { not: userIdBigInt },
+          role: 'AGENCY_ADMIN',
+          status: 'ACTIVE',
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      });
+
+      // Combine and deduplicate
+      const allUsers = [...createdUsers, ...agencyAdmins];
+      const uniqueUsers = allUsers.filter((user, index, self) =>
+        index === self.findIndex(u => u?.id?.toString() === user?.id?.toString())
+      );
+
+      return uniqueUsers.map(u => ({
+        id: u.id.toString(),
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        role: u.role,
+      }));
+    }
+
     // AGENCY_ADMIN can chat with all users in their agency (managers, brokers, tenants, owners)
     if (role === 'AGENCY_ADMIN' && userAgencyId) {
       const agencyUsers = await this.prisma.user.findMany({
