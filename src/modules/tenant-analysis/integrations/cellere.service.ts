@@ -31,6 +31,17 @@ export interface FinancialAnalysisResponse {
   birthDate?: string;
   motherName?: string;
   situacaoCadastral?: string;
+  // Address and contact info
+  address?: {
+    logradouro?: string;
+    numero?: string;
+    bairro?: string;
+    cidade?: string;
+    uf?: string;
+    cep?: string;
+  };
+  phones?: string[];
+  emails?: string[];
 }
 
 export interface BackgroundCheckRequest {
@@ -461,8 +472,29 @@ export class CellereService {
       const cpfData = data?.CadastroPessoaFisica || data;
       const rfData = data?.ReceitaFederalCpf || {};
 
+      // Debug: Log available fields for address/phone extraction
+      this.logger.debug(`CPF Data keys: ${Object.keys(cpfData || {}).join(', ')}`);
+      if (cpfData?.Endereco) this.logger.debug(`Endereco keys: ${Object.keys(cpfData.Endereco).join(', ')}`);
+      if (cpfData?.EnderecoResidencial) this.logger.debug(`EnderecoResidencial keys: ${Object.keys(cpfData.EnderecoResidencial).join(', ')}`);
+
       const situacao = rfData?.SituacaoCadastral || cpfData?.SituacaoReceitaBancoDados || '';
       const hasIssues = situacao !== 'REGULAR' && situacao !== '';
+
+      // Extract address from various possible locations
+      const endereco = cpfData?.Endereco || cpfData?.EnderecoResidencial || {};
+      const hasAddress = endereco?.Logradouro || cpfData?.Logradouro;
+
+      // Extract phones
+      const phones: string[] = [];
+      if (cpfData?.Telefone) phones.push(cpfData.Telefone);
+      if (cpfData?.TelefoneComDDD) phones.push(cpfData.TelefoneComDDD);
+      if (cpfData?.Celular) phones.push(cpfData.Celular);
+      if (endereco?.Telefone) phones.push(endereco.Telefone);
+
+      // Extract emails
+      const emails: string[] = [];
+      if (cpfData?.Email) emails.push(cpfData.Email);
+      if (cpfData?.EnderecoEmail) emails.push(cpfData.EnderecoEmail);
 
       return {
         name: cpfData?.Nome || rfData?.NomePessoaFisica,
@@ -477,11 +509,29 @@ export class CellereService {
         averageDelayDays: 0,
         debtDetails: [],
         status: hasIssues ? 'WARNING' : 'CLEAR',
+        address: hasAddress ? {
+          logradouro: endereco?.Logradouro || cpfData?.Logradouro,
+          numero: endereco?.Numero || cpfData?.Numero,
+          bairro: endereco?.Bairro || cpfData?.Bairro,
+          cidade: endereco?.Cidade || cpfData?.Cidade,
+          uf: endereco?.UF || cpfData?.UF,
+          cep: endereco?.CEP || cpfData?.CEP,
+        } : undefined,
+        phones: phones.length > 0 ? phones : undefined,
+        emails: emails.length > 0 ? emails : undefined,
       };
     } else {
       // CNPJ
       const situacao = data?.SituacaoCadastral || '';
       const hasIssues = situacao !== 'ATIVA' && situacao !== '';
+
+      // Extract address for CNPJ
+      const hasAddress = data?.Logradouro;
+
+      // Extract phones for CNPJ
+      const phones: string[] = [];
+      if (data?.Telefone) phones.push(data.Telefone);
+      if (data?.TelefoneComDDD) phones.push(data.TelefoneComDDD);
 
       return {
         name: data?.NomeEmpresarial || data?.NomeFantasia,
@@ -491,6 +541,15 @@ export class CellereService {
         activeDebts: 0,
         hasNegativeRecords: hasIssues,
         status: hasIssues ? 'WARNING' : 'CLEAR',
+        address: hasAddress ? {
+          logradouro: data?.Logradouro,
+          numero: data?.Numero,
+          bairro: data?.Bairro,
+          cidade: data?.Cidade || data?.Municipio,
+          uf: data?.UF,
+          cep: data?.CEP,
+        } : undefined,
+        phones: phones.length > 0 ? phones : undefined,
       };
     }
   }

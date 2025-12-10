@@ -87,12 +87,13 @@ export class TenantAnalysisService {
     // Generate unique token
     const token = this.generateAnalysisToken();
 
-    // Extract basic data from document validation
+    // Extract basic data from document validation or financial data
     const isCPF = documentType === 'CPF';
-    const address = documentValidation?.address;
+    const address = documentValidation?.address || financial?.address;
     const fullAddress = address
       ? `${address.logradouro || ''}${address.numero ? ', ' + address.numero : ''}${address.bairro ? ' - ' + address.bairro : ''}`
       : null;
+    const phones = documentValidation?.phones || financial?.phones || [];
 
     // Only save to DB after successful analysis
     const analysis = await this.prisma.tenantAnalysis.create({
@@ -100,7 +101,7 @@ export class TenantAnalysisService {
         token,
         document,
         documentType,
-        name: documentValidation?.registrationName || name,
+        name: documentValidation?.registrationName || financial?.name || name,
         requestedById: userId,
         agencyId,
 
@@ -111,7 +112,7 @@ export class TenantAnalysisService {
           personCity: address?.cidade,
           personState: address?.uf,
           personZipCode: address?.cep,
-          personPhone: documentValidation?.phones?.[0] || null,
+          personPhone: phones?.[0] || null,
           birthDate: documentValidation?.birthDate || financial?.birthDate,
           motherName: documentValidation?.motherName || financial?.motherName,
         } : {}),
@@ -125,7 +126,7 @@ export class TenantAnalysisService {
           companyCity: address?.cidade,
           companyState: address?.uf,
           companyZipCode: address?.cep,
-          companyPhone: documentValidation?.phones?.[0] || null,
+          companyPhone: phones?.[0] || null,
         } : {}),
 
         // LGPD tracking
