@@ -105,11 +105,7 @@ E por estarem assim justos e contratados, firmam o presente instrumento em 2 (du
 **TESTEMUNHA:**
 [ASSINATURA_TESTEMUNHA]
 
----
-**Verificação de Autenticidade**
-Hash do Contrato: [HASH_CONTRATO]
-Este documento foi assinado eletronicamente conforme MP 2.200-2/2001.
-Valide em: [VERIFICACAO_URL]`
+`
   },
   {
     id: "residential-pf-pj",
@@ -210,11 +206,7 @@ E por estarem assim justos e contratados, firmam o presente instrumento.
 **TESTEMUNHA:**
 [ASSINATURA_TESTEMUNHA]
 
----
-**Verificação de Autenticidade**
-Hash do Contrato: [HASH_CONTRATO]
-Este documento foi assinado eletronicamente conforme MP 2.200-2/2001.
-Valide em: [VERIFICACAO_URL]`
+`
   },
   {
     id: "residential-pj-pf",
@@ -308,11 +300,7 @@ E por estarem assim justos e contratados, firmam o presente contrato.
 **TESTEMUNHA:**
 [ASSINATURA_TESTEMUNHA]
 
----
-**Verificação de Autenticidade**
-Hash do Contrato: [HASH_CONTRATO]
-Este documento foi assinado eletronicamente conforme MP 2.200-2/2001.
-Valide em: [VERIFICACAO_URL]`
+`
   },
   {
     id: "commercial-cnpj-cnpj",
@@ -416,11 +404,7 @@ E por estarem assim justos e contratados, firmam o presente contrato.
 **TESTEMUNHA:**
 [ASSINATURA_TESTEMUNHA]
 
----
-**Verificação de Autenticidade**
-Hash do Contrato: [HASH_CONTRATO]
-Este documento foi assinado eletronicamente conforme MP 2.200-2/2001.
-Valide em: [VERIFICACAO_URL]`
+`
   },
   {
     id: "platform-service",
@@ -515,11 +499,7 @@ Confirmação eletrônica via plataforma MR3X.
 **TESTEMUNHA:**
 [ASSINATURA_TESTEMUNHA]
 
----
-**Verificação de Autenticidade**
-Hash do Contrato: [HASH_CONTRATO]
-Este documento foi assinado eletronicamente conforme MP 2.200-2/2001.
-Valide em: [VERIFICACAO_URL]`
+`
   },
   {
     id: "partnership-affiliate",
@@ -613,11 +593,7 @@ E por estarem assim justos e contratados, firmam o presente instrumento.
 **TESTEMUNHA:**
 [ASSINATURA_TESTEMUNHA]
 
----
-**Verificação de Autenticidade**
-Hash do Contrato: [HASH_CONTRATO]
-Este documento foi assinado eletronicamente conforme MP 2.200-2/2001.
-Valide em: [VERIFICACAO_URL]`
+`
   },
   {
     id: "condominium-admin",
@@ -719,11 +695,7 @@ E por estarem assim justos e contratados, firmam o presente contrato.
 **TESTEMUNHA:**
 [ASSINATURA_TESTEMUNHA]
 
----
-**Verificação de Autenticidade**
-Hash do Contrato: [HASH_CONTRATO]
-Este documento foi assinado eletronicamente conforme MP 2.200-2/2001.
-Valide em: [VERIFICACAO_URL]`
+`
   }
 ];
 
