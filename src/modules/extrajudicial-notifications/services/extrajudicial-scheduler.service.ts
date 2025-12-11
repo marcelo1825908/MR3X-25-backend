@@ -545,9 +545,9 @@ Em caso de não pagamento no prazo estipulado:
    * Generate unique token
    */
   private generateToken(): string {
-    const timestamp = Date.now().toString(36);
-    const random = crypto.randomBytes(8).toString('hex');
-    return `NE-${timestamp}-${random}`.toUpperCase();
+    const year = new Date().getFullYear();
+    const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
+    return `MR3X-NOT-${year}-${random}`;
   }
 
   /**
@@ -556,7 +556,7 @@ Em caso de não pagamento no prazo estipulado:
   private generateNotificationNumber(): string {
     const year = new Date().getFullYear();
     const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
-    return `NE-${year}-${random}`;
+    return `MR3X-NOT-${year}-${random}`;
   }
 
   /**

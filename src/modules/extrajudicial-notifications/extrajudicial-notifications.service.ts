@@ -19,9 +19,9 @@ export class ExtrajudicialNotificationsService {
    * Generate unique notification token
    */
   private generateNotificationToken(): string {
-    const timestamp = Date.now().toString(36);
-    const random = crypto.randomBytes(16).toString('hex');
-    return `NOTIF-${timestamp}-${random}`.toUpperCase();
+    const year = new Date().getFullYear();
+    const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
+    return `MR3X-NOT-${year}-${random}`;
   }
 
   /**
@@ -30,7 +30,7 @@ export class ExtrajudicialNotificationsService {
   private generateNotificationNumber(): string {
     const year = new Date().getFullYear();
     const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
-    return `NE-${year}-${random}`;
+    return `MR3X-NOT-${year}-${random}`;
   }
 
   /**

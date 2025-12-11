@@ -463,14 +463,14 @@ export class ExtrajudicialNotificationPdfService {
       font-family: 'Times New Roman', Times, serif;
       font-size: 11pt;
       line-height: 1.6;
-      color: #1a1a1a;
+      color: #333;
       background: white;
     }
 
     .page {
       width: 210mm;
       min-height: 297mm;
-      padding: 20mm 18mm;
+      padding: 20mm 15mm;
       position: relative;
     }
 
@@ -482,8 +482,8 @@ export class ExtrajudicialNotificationPdfService {
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%) rotate(-45deg);
-      font-size: 48px;
-      color: rgba(200, 200, 200, 0.2);
+      font-size: 80px;
+      color: rgba(200, 200, 200, 0.3);
       font-weight: bold;
       white-space: nowrap;
       pointer-events: none;
@@ -493,141 +493,188 @@ export class ExtrajudicialNotificationPdfService {
         : ''
     }
 
+    /* Header info bar */
+    .header-info-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 15px;
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      margin-bottom: 15px;
+      font-size: 9pt;
+    }
+
+    .header-info-bar .token {
+      font-family: 'Courier New', monospace;
+      font-weight: bold;
+    }
+
+    /* QR and Barcode container - centered like contract */
+    .codes-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 30px;
+      padding: 15px;
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+
+    .codes-container .qrcode img {
+      width: 80px;
+      height: 80px;
+    }
+
+    .codes-container .barcode img {
+      height: 50px;
+    }
+
+    .codes-container .barcode-text {
+      font-family: 'Courier New', monospace;
+      font-size: 10pt;
+      text-align: center;
+      margin-top: 5px;
+    }
+
+    /* Sidebar barcode (vertical on right side) */
     .sidebar-barcode {
       position: fixed;
-      right: 3mm;
+      right: 5mm;
       top: 50%;
       transform: rotate(90deg) translateX(-50%);
       z-index: 100;
     }
 
     .sidebar-barcode img {
-      max-width: 50mm;
+      max-width: 60mm;
       height: auto;
     }
 
+    /* QR Code bottom right */
     .qrcode-container {
       position: fixed;
-      bottom: 15mm;
-      right: 15mm;
+      bottom: 25mm;
+      right: 20mm;
       text-align: center;
       z-index: 100;
     }
 
     .qrcode-container img {
-      width: 20mm;
-      height: 20mm;
+      width: 25mm;
+      height: 25mm;
     }
 
     .qrcode-container p {
-      font-size: 6pt;
+      font-size: 7pt;
       color: #666;
-      margin-top: 1mm;
+      margin-top: 2mm;
     }
 
+    /* Header */
     .header {
       text-align: center;
       margin-bottom: 20px;
-      border-bottom: 3px double #333;
+      border-bottom: 2px solid #333;
       padding-bottom: 15px;
     }
 
     .header h1 {
-      font-size: 16pt;
+      font-size: 18pt;
       font-weight: bold;
-      color: #1a1a1a;
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      margin-bottom: 8px;
+      margin-bottom: 5px;
     }
 
     .header .subtitle {
       font-size: 12pt;
-      color: #333;
+      color: #555;
       font-weight: 600;
     }
 
-    .header .doc-info {
-      margin-top: 10px;
-      font-size: 9pt;
-      color: #555;
-    }
-
-    .header .doc-info span {
-      margin: 0 10px;
+    .header .token {
+      font-size: 10pt;
+      color: #666;
+      font-family: 'Courier New', monospace;
     }
 
     .priority-badge {
       display: inline-block;
-      padding: 3px 12px;
+      padding: 4px 15px;
       border-radius: 3px;
       font-size: 9pt;
       font-weight: bold;
       color: white;
       background-color: ${data.priorityColor};
-      margin-top: 8px;
+      margin-top: 10px;
     }
 
-    .parties-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
+    /* Sections */
+    .section {
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-size: 12pt;
+      font-weight: bold;
+      color: #333;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 5px;
+      margin-bottom: 10px;
+    }
+
+    /* Parties info */
+    .parties {
+      display: flex;
       gap: 20px;
       margin-bottom: 20px;
     }
 
-    .party-box {
-      border: 1px solid #ccc;
-      padding: 12px;
-      background: #fafafa;
+    .party {
+      flex: 1;
+      border: 1px solid #ddd;
+      padding: 10px;
+      border-radius: 4px;
     }
 
-    .party-box h3 {
-      font-size: 10pt;
+    .party h3 {
+      font-size: 11pt;
       font-weight: bold;
-      color: #333;
-      text-transform: uppercase;
-      border-bottom: 1px solid #ccc;
-      padding-bottom: 5px;
       margin-bottom: 8px;
+      color: #444;
     }
 
-    .party-box p {
-      font-size: 9pt;
+    .party p {
+      font-size: 10pt;
       margin-bottom: 3px;
     }
 
-    .party-box .label {
-      font-weight: 600;
-      color: #555;
-    }
-
-    .property-box {
-      border: 1px solid #ccc;
-      padding: 12px;
-      margin-bottom: 20px;
-      background: #f9f9f9;
-    }
-
-    .property-box h3 {
-      font-size: 10pt;
+    .party .label {
       font-weight: bold;
-      color: #333;
-      text-transform: uppercase;
-      margin-bottom: 8px;
     }
 
+    /* Property info */
+    .property-info {
+      background: #f9f9f9;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+
+    /* Content sections */
     .content-section {
       margin-bottom: 20px;
     }
 
     .content-section h3 {
-      font-size: 11pt;
+      font-size: 12pt;
       font-weight: bold;
-      color: #1a1a1a;
-      text-transform: uppercase;
-      border-bottom: 2px solid #333;
+      color: #333;
+      border-bottom: 1px solid #ccc;
       padding-bottom: 5px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
 
     .content-section p {
@@ -637,12 +684,13 @@ export class ExtrajudicialNotificationPdfService {
 
     .legal-text {
       background: #f5f5f5;
-      border-left: 3px solid #666;
-      padding: 10px 15px;
+      border-left: 4px solid #666;
+      padding: 12px 15px;
       font-style: italic;
-      margin: 10px 0;
+      margin: 15px 0;
     }
 
+    /* Financial table */
     .financial-table {
       width: 100%;
       border-collapse: collapse;
@@ -651,21 +699,21 @@ export class ExtrajudicialNotificationPdfService {
 
     .financial-table th,
     .financial-table td {
-      border: 1px solid #ccc;
-      padding: 8px 12px;
+      border: 1px solid #ddd;
+      padding: 10px 12px;
       text-align: left;
-      font-size: 9pt;
+      font-size: 10pt;
     }
 
     .financial-table th {
-      background: #eee;
+      background: #f0f0f0;
       font-weight: 600;
     }
 
     .financial-table .total-row {
-      background: #ddd;
+      background: #e0e0e0;
       font-weight: bold;
-      font-size: 10pt;
+      font-size: 11pt;
     }
 
     .financial-table .amount {
@@ -673,43 +721,96 @@ export class ExtrajudicialNotificationPdfService {
       font-family: 'Courier New', monospace;
     }
 
+    /* Detail boxes */
+    .contract-details {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .detail-box {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: center;
+    }
+
+    .detail-box .label {
+      font-size: 9pt;
+      color: #666;
+      text-transform: uppercase;
+    }
+
+    .detail-box .value {
+      font-size: 14pt;
+      font-weight: bold;
+      color: #333;
+    }
+
+    /* Deadline box */
     .deadline-box {
       background: #fff3cd;
-      border: 2px solid #e6a700;
+      border: 2px solid #ffc107;
       padding: 15px;
       margin: 20px 0;
       text-align: center;
+      border-radius: 4px;
     }
 
     .deadline-box h4 {
       font-size: 11pt;
       color: #856404;
       margin-bottom: 8px;
+      text-transform: uppercase;
     }
 
     .deadline-box .date {
-      font-size: 14pt;
+      font-size: 16pt;
       font-weight: bold;
       color: #664d03;
     }
 
     .deadline-box .days {
-      font-size: 9pt;
+      font-size: 10pt;
       color: #856404;
       margin-top: 5px;
     }
 
+    /* Demanded action */
+    .demanded-action {
+      background: #d1ecf1;
+      border: 1px solid #bee5eb;
+      padding: 15px;
+      margin: 15px 0;
+      border-radius: 4px;
+    }
+
+    .demanded-action h4 {
+      font-size: 11pt;
+      color: #0c5460;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+
+    .demanded-action p {
+      font-size: 10pt;
+      color: #0c5460;
+    }
+
+    /* Consequences box */
     .consequences-box {
       background: #f8d7da;
       border: 1px solid #f5c6cb;
-      padding: 12px;
+      padding: 15px;
       margin: 15px 0;
+      border-radius: 4px;
     }
 
     .consequences-box h4 {
       font-size: 10pt;
       color: #721c24;
       margin-bottom: 8px;
+      text-transform: uppercase;
     }
 
     .consequences-box p {
@@ -717,45 +818,37 @@ export class ExtrajudicialNotificationPdfService {
       color: #721c24;
     }
 
+    /* Signatures */
     .signatures {
-      margin-top: 30px;
+      margin-top: 40px;
       page-break-inside: avoid;
     }
 
-    .signatures h3 {
-      font-size: 11pt;
-      font-weight: bold;
-      text-transform: uppercase;
-      border-bottom: 2px solid #333;
-      padding-bottom: 5px;
-      margin-bottom: 20px;
-    }
-
-    .signature-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
+    .signature-row {
+      display: flex;
       gap: 30px;
+      margin-bottom: 30px;
     }
 
     .signature-box {
+      flex: 1;
       text-align: center;
-      padding: 15px;
-    }
-
-    .signature-image {
-      height: 45px;
-      margin-bottom: 5px;
-    }
-
-    .signature-image img {
-      max-height: 45px;
-      max-width: 140px;
     }
 
     .signature-line {
       border-top: 1px solid #333;
-      margin-top: 50px;
-      padding-top: 8px;
+      margin-top: 60px;
+      padding-top: 5px;
+    }
+
+    .signature-image {
+      height: 50px;
+      margin-bottom: 10px;
+    }
+
+    .signature-image img {
+      max-height: 50px;
+      max-width: 150px;
     }
 
     .signature-name {
@@ -763,61 +856,42 @@ export class ExtrajudicialNotificationPdfService {
       font-size: 10pt;
     }
 
-    .signature-role {
-      font-size: 8pt;
+    .signature-doc {
+      font-size: 9pt;
       color: #666;
-      text-transform: uppercase;
     }
 
     .signature-meta {
-      font-size: 6pt;
+      font-size: 7pt;
       color: #888;
-      margin-top: 5px;
-      font-family: 'Courier New', monospace;
+      margin-top: 3px;
     }
 
+    /* Footer */
     .footer {
       position: fixed;
-      bottom: 8mm;
-      left: 18mm;
-      right: 45mm;
-      font-size: 6pt;
+      bottom: 10mm;
+      left: 15mm;
+      right: 60mm;
+      font-size: 7pt;
       color: #666;
       border-top: 1px solid #ddd;
       padding-top: 5px;
     }
 
     .footer p {
-      margin-bottom: 1px;
+      margin-bottom: 2px;
     }
 
     .hash {
       font-family: 'Courier New', monospace;
-      font-size: 5pt;
+      font-size: 6pt;
       word-break: break-all;
-    }
-
-    .demanded-action {
-      background: #e8f4fd;
-      border: 1px solid #b8daff;
-      padding: 12px;
-      margin: 15px 0;
-    }
-
-    .demanded-action h4 {
-      font-size: 10pt;
-      color: #004085;
-      margin-bottom: 8px;
-    }
-
-    .demanded-action p {
-      font-size: 10pt;
-      color: #004085;
     }
   </style>
 </head>
 <body>
-  ${data.isProvisional ? '<div class="watermark">MINUTA - AGUARDANDO ASSINATURAS</div>' : ''}
+  ${data.isProvisional ? '<div class="watermark">AGUARDANDO ASSINATURAS</div>' : ''}
 
   <div class="sidebar-barcode">
     <img src="${data.barcodeBase64}" alt="Codigo de barras">
@@ -829,48 +903,70 @@ export class ExtrajudicialNotificationPdfService {
   </div>
 
   <div class="page">
-    <div class="header">
-      <h1>Notificacao Extrajudicial</h1>
-      <p class="subtitle">${data.typeLabel}</p>
-      <div class="doc-info">
-        <span><strong>N:</strong> ${data.notificationNumber}</span>
-        <span><strong>Protocolo:</strong> ${data.protocolNumber}</span>
-        <span><strong>Data:</strong> ${data.createdAtFormatted}</span>
+    <!-- Header info bar like contract -->
+    <div class="header-info-bar">
+      <div>
+        <span class="token">Token: ${data.token}</span>
       </div>
+      <div>
+        <span><strong>N:</strong> ${data.notificationNumber}</span>
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        <span><strong>Protocolo:</strong> ${data.protocolNumber}</span>
+      </div>
+    </div>
+
+    <!-- QR Code and Barcode centered like contract -->
+    <div class="codes-container">
+      <div class="qrcode">
+        <img src="${data.qrCodeBase64}" alt="QR Code">
+      </div>
+      <div class="barcode">
+        <img src="${data.barcodeBase64}" alt="Codigo de barras">
+        <div class="barcode-text">${data.token}</div>
+      </div>
+    </div>
+
+    <div class="header">
+      <h1>NOTIFICACAO EXTRAJUDICIAL</h1>
+      <p class="subtitle">${data.typeLabel.toUpperCase()}</p>
       <span class="priority-badge">${data.priorityLabel}</span>
     </div>
 
-    <div class="parties-grid">
-      <div class="party-box">
-        <h3>Notificante (Credor)</h3>
-        <p><span class="label">Nome:</span> ${data.creditor.name}</p>
-        <p><span class="label">CPF/CNPJ:</span> ${data.creditor.document}</p>
-        ${data.creditor.address ? `<p><span class="label">Endereco:</span> ${data.creditor.address}</p>` : ''}
-        ${data.creditor.email ? `<p><span class="label">E-mail:</span> ${data.creditor.email}</p>` : ''}
-        ${data.creditor.phone ? `<p><span class="label">Telefone:</span> ${data.creditor.phone}</p>` : ''}
-      </div>
-      <div class="party-box">
-        <h3>Notificado (Devedor)</h3>
-        <p><span class="label">Nome:</span> ${data.debtor.name}</p>
-        <p><span class="label">CPF/CNPJ:</span> ${data.debtor.document}</p>
-        ${data.debtor.address ? `<p><span class="label">Endereco:</span> ${data.debtor.address}</p>` : ''}
-        ${data.debtor.email ? `<p><span class="label">E-mail:</span> ${data.debtor.email}</p>` : ''}
-        ${data.debtor.phone ? `<p><span class="label">Telefone:</span> ${data.debtor.phone}</p>` : ''}
+    <div class="section">
+      <h2 class="section-title">PARTES</h2>
+      <div class="parties">
+        <div class="party">
+          <h3>NOTIFICANTE (Credor)</h3>
+          <p><span class="label">Nome:</span> ${data.creditor.name}</p>
+          <p><span class="label">CPF/CNPJ:</span> ${data.creditor.document}</p>
+          ${data.creditor.address ? `<p><span class="label">Endereco:</span> ${data.creditor.address}</p>` : ''}
+          ${data.creditor.email ? `<p><span class="label">E-mail:</span> ${data.creditor.email}</p>` : ''}
+          ${data.creditor.phone ? `<p><span class="label">Telefone:</span> ${data.creditor.phone}</p>` : ''}
+        </div>
+        <div class="party">
+          <h3>NOTIFICADO (Devedor)</h3>
+          <p><span class="label">Nome:</span> ${data.debtor.name}</p>
+          <p><span class="label">CPF/CNPJ:</span> ${data.debtor.document}</p>
+          ${data.debtor.address ? `<p><span class="label">Endereco:</span> ${data.debtor.address}</p>` : ''}
+          ${data.debtor.email ? `<p><span class="label">E-mail:</span> ${data.debtor.email}</p>` : ''}
+          ${data.debtor.phone ? `<p><span class="label">Telefone:</span> ${data.debtor.phone}</p>` : ''}
+        </div>
       </div>
     </div>
 
-    <div class="property-box">
-      <h3>Imovel Objeto</h3>
-      <p><span class="label">Endereco:</span> ${data.property.address}</p>
-      <p><span class="label">Cidade/UF:</span> ${data.property.city}${data.property.state ? '/' + data.property.state : ''}</p>
+    <div class="section">
+      <h2 class="section-title">IMOVEL OBJETO</h2>
+      <div class="property-info">
+        <p><span class="label">Endereco:</span> ${data.property.address}</p>
+        <p><span class="label">Cidade:</span> ${data.property.city}${data.property.state ? ' - ' + data.property.state : ''}</p>
+      </div>
     </div>
 
-    <div class="content-section">
-      <h3>${data.title}</h3>
-
-      <p><strong>Objeto:</strong> ${data.subject}</p>
-
-      <p>${data.description}</p>
+    <div class="section">
+      <h2 class="section-title">OBJETO DA NOTIFICACAO</h2>
+      <p><strong>Titulo:</strong> ${data.title}</p>
+      <p><strong>Assunto:</strong> ${data.subject}</p>
+      <p style="margin-top: 10px; text-align: justify;">${data.description}</p>
 
       <div class="legal-text">
         <strong>Fundamentacao Legal:</strong><br>
@@ -878,8 +974,8 @@ export class ExtrajudicialNotificationPdfService {
       </div>
     </div>
 
-    <div class="content-section">
-      <h3>Valores Devidos</h3>
+    <div class="section">
+      <h2 class="section-title">VALORES DEVIDOS</h2>
       <table class="financial-table">
         <tbody>
           ${
@@ -945,10 +1041,22 @@ export class ExtrajudicialNotificationPdfService {
       <p>${data.demandedAction}</p>
     </div>
 
-    <div class="deadline-box">
-      <h4>PRAZO PARA CUMPRIMENTO</h4>
-      <p class="date">${data.deadlineDateFormatted}</p>
-      <p class="days">(${data.deadline.days} dias${data.deadline.gracePeriodDays ? ` + ${data.deadline.gracePeriodDays} dias de carencia` : ''})</p>
+    <div class="section">
+      <h2 class="section-title">PRAZO PARA CUMPRIMENTO</h2>
+      <div class="contract-details">
+        <div class="detail-box">
+          <p class="label">Data Limite</p>
+          <p class="value">${data.deadlineDateFormatted}</p>
+        </div>
+        <div class="detail-box">
+          <p class="label">Prazo</p>
+          <p class="value">${data.deadline.days} dias</p>
+        </div>
+        <div class="detail-box">
+          <p class="label">Carencia</p>
+          <p class="value">${data.deadline.gracePeriodDays ? data.deadline.gracePeriodDays + ' dias' : 'N/A'}</p>
+        </div>
+      </div>
     </div>
 
     ${
@@ -963,9 +1071,9 @@ export class ExtrajudicialNotificationPdfService {
     }
 
     <div class="signatures">
-      <h3>Assinaturas</h3>
+      <h2 class="section-title">ASSINATURAS</h2>
 
-      <div class="signature-grid">
+      <div class="signature-row">
         <div class="signature-box">
           ${
             data.signatures?.creditor?.signature
@@ -978,12 +1086,12 @@ export class ExtrajudicialNotificationPdfService {
           }
           <div class="signature-line">
             <p class="signature-name">${data.creditor.name}</p>
-            <p class="signature-role">Notificante / Credor</p>
+            <p class="signature-doc">NOTIFICANTE - ${data.creditor.document}</p>
             ${
               data.signatures?.creditor
                 ? `
             <p class="signature-meta">
-              ${this.formatDateTime(data.signatures.creditor.signedAt)}<br>
+              Assinado em: ${this.formatDateTime(data.signatures.creditor.signedAt)}<br>
               IP: ${data.signatures.creditor.ip}
               ${data.signatures.creditor.lat ? `<br>Geo: ${data.signatures.creditor.lat.toFixed(6)}, ${data.signatures.creditor.lng?.toFixed(6)}` : ''}
             </p>
@@ -1005,12 +1113,12 @@ export class ExtrajudicialNotificationPdfService {
           }
           <div class="signature-line">
             <p class="signature-name">${data.debtor.name}</p>
-            <p class="signature-role">Notificado / Devedor</p>
+            <p class="signature-doc">NOTIFICADO - ${data.debtor.document}</p>
             ${
               data.signatures?.debtor
                 ? `
             <p class="signature-meta">
-              ${this.formatDateTime(data.signatures.debtor.signedAt)}<br>
+              Assinado em: ${this.formatDateTime(data.signatures.debtor.signedAt)}<br>
               IP: ${data.signatures.debtor.ip}
               ${data.signatures.debtor.lat ? `<br>Geo: ${data.signatures.debtor.lat.toFixed(6)}, ${data.signatures.debtor.lng?.toFixed(6)}` : ''}
             </p>
@@ -1019,7 +1127,12 @@ export class ExtrajudicialNotificationPdfService {
             }
           </div>
         </div>
+      </div>
 
+      ${
+        data.signatures?.witness1 || data.signatures?.witness2
+          ? `
+      <div class="signature-row">
         ${
           data.signatures?.witness1
             ? `
@@ -1029,8 +1142,8 @@ export class ExtrajudicialNotificationPdfService {
           </div>
           <div class="signature-line">
             <p class="signature-name">${data.signatures.witness1.name}</p>
-            <p class="signature-role">Testemunha 1 - ${data.signatures.witness1.document}</p>
-            <p class="signature-meta">${this.formatDateTime(data.signatures.witness1.signedAt)}</p>
+            <p class="signature-doc">TESTEMUNHA - ${data.signatures.witness1.document}</p>
+            <p class="signature-meta">Assinado em: ${this.formatDateTime(data.signatures.witness1.signedAt)}</p>
           </div>
         </div>
         `
@@ -1046,14 +1159,17 @@ export class ExtrajudicialNotificationPdfService {
           </div>
           <div class="signature-line">
             <p class="signature-name">${data.signatures.witness2.name}</p>
-            <p class="signature-role">Testemunha 2 - ${data.signatures.witness2.document}</p>
-            <p class="signature-meta">${this.formatDateTime(data.signatures.witness2.signedAt)}</p>
+            <p class="signature-doc">TESTEMUNHA - ${data.signatures.witness2.document}</p>
+            <p class="signature-meta">Assinado em: ${this.formatDateTime(data.signatures.witness2.signedAt)}</p>
           </div>
         </div>
         `
             : ''
         }
       </div>
+      `
+          : ''
+      }
     </div>
 
     <div class="footer">
