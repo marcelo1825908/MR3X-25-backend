@@ -127,18 +127,25 @@ export class ExtrajudicialNotificationsController {
   async getStatistics(@CurrentUser() user?: any) {
     let createdById: string | undefined;
     let agencyId: string | undefined;
+    let userId: string | undefined;
 
     if (user?.role === 'CEO') {
       // CEO sees all
     } else if (user?.role === 'ADMIN' || user?.role === 'INDEPENDENT_OWNER') {
-      createdById = user.sub;
+      userId = user.sub;
+    } else if (user?.role === 'PROPRIETARIO') {
+      // PROPRIETARIO sees notifications where they are the creditor
+      userId = user.sub;
+    } else if (user?.role === 'INQUILINO') {
+      // INQUILINO sees notifications where they are the debtor
+      userId = user.sub;
     } else if (user?.agencyId) {
       agencyId = user.agencyId;
     } else {
-      createdById = user?.sub;
+      userId = user?.sub;
     }
 
-    return this.notificationsService.getStatistics({ agencyId, createdById });
+    return this.notificationsService.getStatistics({ agencyId, createdById, userId });
   }
 
   @Get('token/:token')

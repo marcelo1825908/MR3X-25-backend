@@ -684,13 +684,24 @@ export class ExtrajudicialNotificationsService {
 
   /**
    * Get statistics
+   * userId is used to filter notifications where user is creditor, debtor, or creator
    */
-  async getStatistics(params: { agencyId?: string; createdById?: string }) {
-    const { agencyId, createdById } = params;
+  async getStatistics(params: { agencyId?: string; createdById?: string; userId?: string }) {
+    const { agencyId, createdById, userId } = params;
 
     const where: any = {};
-    if (agencyId) where.agencyId = BigInt(agencyId);
-    if (createdById) where.createdBy = BigInt(createdById);
+
+    // If userId is provided, show statistics for notifications where user is involved
+    if (userId && !agencyId && !createdById) {
+      where.OR = [
+        { createdBy: BigInt(userId) },
+        { creditorId: BigInt(userId) },
+        { debtorId: BigInt(userId) },
+      ];
+    } else {
+      if (agencyId) where.agencyId = BigInt(agencyId);
+      if (createdById) where.createdBy = BigInt(createdById);
+    }
 
     const [total, draft, generated, sent, viewed, responded, resolved, expired, judicial] = await Promise.all([
       this.prisma.extrajudicialNotification.count({ where }),
