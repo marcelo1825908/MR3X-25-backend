@@ -95,6 +95,11 @@ export class ExtrajudicialNotificationsController {
     } else if (user?.role === 'ADMIN' || user?.role === 'INDEPENDENT_OWNER') {
       // For these roles, use userId to see notifications they created or are involved in
       createdById = undefined; // Don't restrict by createdById, use userId instead
+    } else if (user?.role === 'INQUILINO') {
+      // INQUILINO (tenant) sees only notifications where they are the debtor
+      // Keep userId to filter by debtorId in the service
+      // Don't set agencyId to avoid filtering by agency
+      effectiveAgencyId = undefined;
     } else if (user?.agencyId) {
       effectiveAgencyId = user.agencyId;
       userId = undefined; // Agency users see all agency notifications
