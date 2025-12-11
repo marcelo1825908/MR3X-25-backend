@@ -545,6 +545,11 @@ export class AgreementPermissionService {
   private isUserOwnerForAgreement(user: UserContext, agreement: AgreementWithRelations): boolean {
     const userId = BigInt(user.sub);
 
+    // PROPRIETARIO can sign as owner if they created the agreement
+    if (user.role === UserRole.PROPRIETARIO && agreement.createdBy === userId) {
+      return true;
+    }
+
     if (agreement.ownerId === userId) return true;
     if (agreement.property?.ownerId === userId) return true;
     if (agreement.contract?.ownerId === userId) return true;
