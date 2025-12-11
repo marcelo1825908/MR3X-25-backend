@@ -140,6 +140,7 @@ export class ExtrajudicialNotificationsService {
 
   /**
    * Find all notifications with filters
+   * Now includes notifications where user is the debtor (so they can see notifications sent TO them)
    */
   async findAll(params: {
     skip?: number;
@@ -154,6 +155,7 @@ export class ExtrajudicialNotificationsService {
     startDate?: string;
     endDate?: string;
     createdById?: string;
+    userId?: string; // Current user ID to show notifications where they are debtor
   }) {
     const {
       skip = 0,
@@ -168,18 +170,35 @@ export class ExtrajudicialNotificationsService {
       startDate,
       endDate,
       createdById,
+      userId,
     } = params;
 
     const where: any = {};
 
-    if (agencyId) where.agencyId = BigInt(agencyId);
+    // Build OR condition for visibility:
+    // User can see notifications they created OR notifications where they are the debtor (after sent)
+    if (userId && !agencyId && !createdById) {
+      where.OR = [
+        { createdBy: BigInt(userId) },
+        {
+          debtorId: BigInt(userId),
+          status: { notIn: ['RASCUNHO'] } // Debtors can only see after it's sent
+        },
+        {
+          creditorId: BigInt(userId),
+        }
+      ];
+    } else {
+      if (agencyId) where.agencyId = BigInt(agencyId);
+      if (createdById) where.createdBy = BigInt(createdById);
+    }
+
     if (propertyId) where.propertyId = BigInt(propertyId);
     if (contractId) where.contractId = BigInt(contractId);
     if (creditorId) where.creditorId = BigInt(creditorId);
     if (debtorId) where.debtorId = BigInt(debtorId);
     if (type) where.type = type;
     if (status) where.status = status;
-    if (createdById) where.createdBy = BigInt(createdById);
 
     if (startDate || endDate) {
       where.createdAt = {};
@@ -214,8 +233,24 @@ export class ExtrajudicialNotificationsService {
       this.prisma.extrajudicialNotification.count({ where }),
     ]);
 
+    // Add userRole field to each notification to indicate if current user is creditor or debtor
+    const notificationsWithRole = notifications.map(n => {
+      const serialized = this.serializeNotification(n);
+      if (userId) {
+        const userIdBigInt = BigInt(userId);
+        if (n.creditorId === userIdBigInt || n.createdBy === userIdBigInt) {
+          serialized.userRole = 'CREDITOR';
+        } else if (n.debtorId === userIdBigInt) {
+          serialized.userRole = 'DEBTOR';
+        } else {
+          serialized.userRole = 'VIEWER';
+        }
+      }
+      return serialized;
+    });
+
     return {
-      data: notifications.map(n => this.serializeNotification(n)),
+      data: notificationsWithRole,
       total,
       page: Math.floor(skip / take) + 1,
       limit: take,
@@ -411,6 +446,7 @@ export class ExtrajudicialNotificationsService {
 
   /**
    * Sign notification
+   * Validates that only the correct party can sign their respective role
    */
   async sign(id: string, data: SignExtrajudicialNotificationDto, userId: string, clientIP?: string, userAgent?: string) {
     const notification = await this.prisma.extrajudicialNotification.findUnique({
@@ -421,10 +457,23 @@ export class ExtrajudicialNotificationsService {
       throw new NotFoundException('Notification not found');
     }
 
+    const userIdBigInt = BigInt(userId);
     const now = new Date();
     const updateData: any = {};
 
+    // Validate creditor signature - only the creditor or creator can sign as creditor
     if (data.creditorSignature) {
+      const isCreditor = notification.creditorId === userIdBigInt;
+      const isCreator = notification.createdBy === userIdBigInt;
+
+      if (!isCreditor && !isCreator) {
+        throw new ForbiddenException('Apenas o credor (notificante) pode assinar como credor');
+      }
+
+      if (notification.creditorSignedAt) {
+        throw new BadRequestException('O credor ja assinou esta notificacao');
+      }
+
       updateData.creditorSignature = data.creditorSignature;
       updateData.creditorSignedAt = now;
       updateData.creditorSignedIP = clientIP;
@@ -433,7 +482,23 @@ export class ExtrajudicialNotificationsService {
       if (data.geoLng) updateData.creditorGeoLng = data.geoLng;
     }
 
+    // Validate debtor signature - only the debtor can sign as debtor
     if (data.debtorSignature) {
+      const isDebtor = notification.debtorId === userIdBigInt;
+
+      if (!isDebtor) {
+        throw new ForbiddenException('Apenas o devedor (notificado) pode assinar como devedor');
+      }
+
+      if (notification.debtorSignedAt) {
+        throw new BadRequestException('O devedor ja assinou esta notificacao');
+      }
+
+      // Debtor can only sign if notification has been sent
+      if (notification.status === 'RASCUNHO') {
+        throw new BadRequestException('A notificacao deve ser enviada antes que o devedor possa assinar');
+      }
+
       updateData.debtorSignature = data.debtorSignature;
       updateData.debtorSignedAt = now;
       updateData.debtorSignedIP = clientIP;
@@ -456,6 +521,7 @@ export class ExtrajudicialNotificationsService {
       updateData.witness2SignedAt = now;
     }
 
+    // Update notification with signatures
     await this.prisma.extrajudicialNotification.update({
       where: { id: BigInt(id) },
       data: updateData,

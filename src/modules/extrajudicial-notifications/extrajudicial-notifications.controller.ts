@@ -87,15 +87,17 @@ export class ExtrajudicialNotificationsController {
   ) {
     let createdById: string | undefined;
     let effectiveAgencyId: string | undefined = agencyId;
+    let userId: string | undefined = user?.sub;
 
     if (user?.role === 'CEO') {
-      // CEO sees all
+      // CEO sees all - don't pass userId to allow seeing everything
+      userId = undefined;
     } else if (user?.role === 'ADMIN' || user?.role === 'INDEPENDENT_OWNER') {
-      createdById = user.sub;
+      // For these roles, use userId to see notifications they created or are involved in
+      createdById = undefined; // Don't restrict by createdById, use userId instead
     } else if (user?.agencyId) {
       effectiveAgencyId = user.agencyId;
-    } else {
-      createdById = user?.sub;
+      userId = undefined; // Agency users see all agency notifications
     }
 
     return this.notificationsService.findAll({
@@ -111,6 +113,7 @@ export class ExtrajudicialNotificationsController {
       createdById,
       startDate,
       endDate,
+      userId,
     });
   }
 
