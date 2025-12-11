@@ -161,7 +161,7 @@ export class ExtrajudicialNotificationPdfService {
       property: {
         address: notification.property?.address || 'Endereco nao informado',
         city: notification.property?.city || 'Cidade nao informada',
-        state: notification.property?.state || '',
+        state: '',
       },
       title: notification.title,
       subject: notification.subject,
