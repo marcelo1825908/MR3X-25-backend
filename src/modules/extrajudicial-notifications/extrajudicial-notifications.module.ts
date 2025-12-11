@@ -4,6 +4,7 @@ import { ExtrajudicialNotificationsService } from './extrajudicial-notifications
 import { ExtrajudicialNotificationVerificationController } from './extrajudicial-notification-verification.controller';
 import { ExtrajudicialNotificationHashService } from './services/extrajudicial-notification-hash.service';
 import { ExtrajudicialNotificationPdfService } from './services/extrajudicial-notification-pdf.service';
+import { ExtrajudicialSchedulerService } from './services/extrajudicial-scheduler.service';
 
 @Module({
   controllers: [
@@ -14,11 +15,13 @@ import { ExtrajudicialNotificationPdfService } from './services/extrajudicial-no
     ExtrajudicialNotificationsService,
     ExtrajudicialNotificationHashService,
     ExtrajudicialNotificationPdfService,
+    ExtrajudicialSchedulerService,
   ],
   exports: [
     ExtrajudicialNotificationsService,
     ExtrajudicialNotificationHashService,
     ExtrajudicialNotificationPdfService,
+    ExtrajudicialSchedulerService,
   ],
 })
 export class ExtrajudicialNotificationsModule {}

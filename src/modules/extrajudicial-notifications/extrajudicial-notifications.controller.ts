@@ -18,6 +18,7 @@ import { Response } from 'express';
 import { ExtrajudicialNotificationsService } from './extrajudicial-notifications.service';
 import { ExtrajudicialNotificationPdfService } from './services/extrajudicial-notification-pdf.service';
 import { ExtrajudicialNotificationHashService } from './services/extrajudicial-notification-hash.service';
+import { ExtrajudicialSchedulerService } from './services/extrajudicial-scheduler.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { OwnerPermissionGuard } from '../../common/guards/owner-permission.guard';
@@ -43,7 +44,19 @@ export class ExtrajudicialNotificationsController {
     private readonly notificationsService: ExtrajudicialNotificationsService,
     private readonly pdfService: ExtrajudicialNotificationPdfService,
     private readonly hashService: ExtrajudicialNotificationHashService,
+    private readonly schedulerService: ExtrajudicialSchedulerService,
   ) {}
+
+  @Post('generate-automatic')
+  @ApiOperation({ summary: 'Manually trigger automatic generation of extrajudicial notifications for overdue contracts' })
+  async generateAutomaticNotifications(@CurrentUser() user: any) {
+    // Only allow admins and agency admins to trigger this
+    if (!['CEO', 'ADMIN', 'AGENCY_ADMIN', 'AGENCY_MANAGER'].includes(user?.role)) {
+      throw new Error('Unauthorized to trigger automatic generation');
+    }
+
+    return this.schedulerService.checkAndGenerateNotifications();
+  }
 
   @Get()
   @ApiOperation({ summary: 'List all extrajudicial notifications' })

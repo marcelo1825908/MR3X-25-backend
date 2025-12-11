@@ -364,7 +364,7 @@ export class ExtrajudicialNotificationsService {
     await this.prisma.extrajudicialNotification.update({
       where: { id: BigInt(id) },
       data: {
-        status: 'ENVIADA',
+        status: 'ENVIADO',
         sentAt: new Date(),
         sentVia: data.sentVia || 'EMAIL',
       },
@@ -396,7 +396,7 @@ export class ExtrajudicialNotificationsService {
       await this.prisma.extrajudicialNotification.update({
         where: { id: BigInt(id) },
         data: {
-          status: 'VISUALIZADA',
+          status: 'VISUALIZADO',
           viewedAt: new Date(),
           viewedIP: clientIP,
           viewedUserAgent: userAgent,
@@ -479,7 +479,7 @@ export class ExtrajudicialNotificationsService {
       throw new NotFoundException('Notification not found');
     }
 
-    const newStatus = data.accepted ? 'ACEITA' : 'RESPONDIDA';
+    const newStatus = data.accepted ? 'RESOLVIDO' : 'RESPONDIDO';
 
     await this.prisma.extrajudicialNotification.update({
       where: { id: BigInt(id) },
@@ -513,7 +513,7 @@ export class ExtrajudicialNotificationsService {
     await this.prisma.extrajudicialNotification.update({
       where: { id: BigInt(id) },
       data: {
-        status: 'ACEITA',
+        status: 'RESOLVIDO',
         resolvedAt: new Date(),
         resolvedBy: BigInt(userId),
         resolutionMethod: data.resolutionMethod,
@@ -543,7 +543,7 @@ export class ExtrajudicialNotificationsService {
     await this.prisma.extrajudicialNotification.update({
       where: { id: BigInt(id) },
       data: {
-        status: 'ENCAMINHADA_JUDICIAL',
+        status: 'ENCAMINHADO_JUDICIAL',
         judicialForwardedAt: new Date(),
         judicialProcessNumber: data.judicialProcessNumber,
         judicialCourt: data.judicialCourt,
@@ -571,14 +571,14 @@ export class ExtrajudicialNotificationsService {
       throw new NotFoundException('Notification not found');
     }
 
-    if (notification.status === 'ENCAMINHADA_JUDICIAL') {
+    if (notification.status === 'ENCAMINHADO_JUDICIAL') {
       throw new ForbiddenException('Cannot cancel notification that was forwarded to judicial process');
     }
 
     await this.prisma.extrajudicialNotification.update({
       where: { id: BigInt(id) },
       data: {
-        status: 'CANCELADA',
+        status: 'CANCELADO',
         notes: reason ? `${notification.notes || ''}\nCancelled: ${reason}` : notification.notes,
       },
     });
@@ -626,20 +626,22 @@ export class ExtrajudicialNotificationsService {
     if (agencyId) where.agencyId = BigInt(agencyId);
     if (createdById) where.createdBy = BigInt(createdById);
 
-    const [total, draft, sent, viewed, responded, resolved, expired, judicial] = await Promise.all([
+    const [total, draft, generated, sent, viewed, responded, resolved, expired, judicial] = await Promise.all([
       this.prisma.extrajudicialNotification.count({ where }),
       this.prisma.extrajudicialNotification.count({ where: { ...where, status: 'RASCUNHO' } }),
-      this.prisma.extrajudicialNotification.count({ where: { ...where, status: 'ENVIADA' } }),
-      this.prisma.extrajudicialNotification.count({ where: { ...where, status: 'VISUALIZADA' } }),
-      this.prisma.extrajudicialNotification.count({ where: { ...where, status: 'RESPONDIDA' } }),
-      this.prisma.extrajudicialNotification.count({ where: { ...where, status: 'ACEITA' } }),
+      this.prisma.extrajudicialNotification.count({ where: { ...where, status: 'GERADO' } }),
+      this.prisma.extrajudicialNotification.count({ where: { ...where, status: 'ENVIADO' } }),
+      this.prisma.extrajudicialNotification.count({ where: { ...where, status: 'VISUALIZADO' } }),
+      this.prisma.extrajudicialNotification.count({ where: { ...where, status: 'RESPONDIDO' } }),
+      this.prisma.extrajudicialNotification.count({ where: { ...where, status: 'RESOLVIDO' } }),
       this.prisma.extrajudicialNotification.count({ where: { ...where, status: 'PRAZO_EXPIRADO' } }),
-      this.prisma.extrajudicialNotification.count({ where: { ...where, status: 'ENCAMINHADA_JUDICIAL' } }),
+      this.prisma.extrajudicialNotification.count({ where: { ...where, status: 'ENCAMINHADO_JUDICIAL' } }),
     ]);
 
     return {
       total,
       draft,
+      generated,
       sent,
       viewed,
       responded,
