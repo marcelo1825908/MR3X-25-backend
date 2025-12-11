@@ -90,7 +90,26 @@ Têm entre si, justo e contratado, o que segue:
 
 E por estarem assim justos e contratados, firmam o presente instrumento em 2 (duas) vias de igual teor e forma, para que produza seus efeitos legais.
 
-[CIDADE], [DATA_ASSINATURA]`
+[CIDADE], [DATA_ASSINATURA]
+
+---
+
+**ASSINATURAS DIGITAIS**
+
+**LOCADOR(A):**
+[ASSINATURA_LOCADOR]
+
+**LOCATÁRIO(A):**
+[ASSINATURA_LOCATARIO]
+
+**TESTEMUNHA:**
+[ASSINATURA_TESTEMUNHA]
+
+---
+**Verificação de Autenticidade**
+Hash do Contrato: [HASH_CONTRATO]
+Este documento foi assinado eletronicamente conforme MP 2.200-2/2001.
+Valide em: [VERIFICACAO_URL]`
   },
   {
     id: "residential-pf-pj",
@@ -176,7 +195,26 @@ Telefone: [TELEFONE_LOCATARIO]
 
 E por estarem assim justos e contratados, firmam o presente instrumento.
 
-[CIDADE], [DATA_ASSINATURA]`
+[CIDADE], [DATA_ASSINATURA]
+
+---
+
+**ASSINATURAS DIGITAIS**
+
+**LOCADOR(A):**
+[ASSINATURA_LOCADOR]
+
+**LOCATÁRIO(A):**
+[ASSINATURA_LOCATARIO]
+
+**TESTEMUNHA:**
+[ASSINATURA_TESTEMUNHA]
+
+---
+**Verificação de Autenticidade**
+Hash do Contrato: [HASH_CONTRATO]
+Este documento foi assinado eletronicamente conforme MP 2.200-2/2001.
+Valide em: [VERIFICACAO_URL]`
   },
   {
     id: "residential-pj-pf",
@@ -255,7 +293,26 @@ Telefone: [TELEFONE_LOCATARIO]
 
 E por estarem assim justos e contratados, firmam o presente contrato.
 
-[CIDADE], [DATA_ASSINATURA]`
+[CIDADE], [DATA_ASSINATURA]
+
+---
+
+**ASSINATURAS DIGITAIS**
+
+**LOCADOR(A):**
+[ASSINATURA_LOCADOR]
+
+**LOCATÁRIO(A):**
+[ASSINATURA_LOCATARIO]
+
+**TESTEMUNHA:**
+[ASSINATURA_TESTEMUNHA]
+
+---
+**Verificação de Autenticidade**
+Hash do Contrato: [HASH_CONTRATO]
+Este documento foi assinado eletronicamente conforme MP 2.200-2/2001.
+Valide em: [VERIFICACAO_URL]`
   },
   {
     id: "commercial-cnpj-cnpj",
@@ -344,7 +401,26 @@ Telefone: [TELEFONE_LOCATARIO]
 
 E por estarem assim justos e contratados, firmam o presente contrato.
 
-[CIDADE], [DATA_ASSINATURA]`
+[CIDADE], [DATA_ASSINATURA]
+
+---
+
+**ASSINATURAS DIGITAIS**
+
+**LOCADOR(A):**
+[ASSINATURA_LOCADOR]
+
+**LOCATÁRIO(A):**
+[ASSINATURA_LOCATARIO]
+
+**TESTEMUNHA:**
+[ASSINATURA_TESTEMUNHA]
+
+---
+**Verificação de Autenticidade**
+Hash do Contrato: [HASH_CONTRATO]
+Este documento foi assinado eletronicamente conforme MP 2.200-2/2001.
+Valide em: [VERIFICACAO_URL]`
   },
   {
     id: "platform-service",
@@ -424,7 +500,26 @@ E por estarem assim justos e contratados, as partes confirmam o aceite eletrôni
 
 Data de aceite: [DATA_ACEITE]
 
-Confirmação eletrônica via plataforma MR3X.`
+Confirmação eletrônica via plataforma MR3X.
+
+---
+
+**ASSINATURAS DIGITAIS**
+
+**MR3X TECNOLOGIA LTDA:**
+[ASSINATURA_IMOBILIARIA]
+
+**CONTRATANTE:**
+[ASSINATURA_LOCADOR]
+
+**TESTEMUNHA:**
+[ASSINATURA_TESTEMUNHA]
+
+---
+**Verificação de Autenticidade**
+Hash do Contrato: [HASH_CONTRATO]
+Este documento foi assinado eletronicamente conforme MP 2.200-2/2001.
+Valide em: [VERIFICACAO_URL]`
   },
   {
     id: "partnership-affiliate",
@@ -503,7 +598,26 @@ Telefone: [TELEFONE_AFILIADO]
 
 E por estarem assim justos e contratados, firmam o presente instrumento.
 
-[CIDADE], [DATA_ASSINATURA]`
+[CIDADE], [DATA_ASSINATURA]
+
+---
+
+**ASSINATURAS DIGITAIS**
+
+**MR3X TECNOLOGIA LTDA:**
+[ASSINATURA_IMOBILIARIA]
+
+**PARCEIRO COMERCIAL:**
+[ASSINATURA_LOCADOR]
+
+**TESTEMUNHA:**
+[ASSINATURA_TESTEMUNHA]
+
+---
+**Verificação de Autenticidade**
+Hash do Contrato: [HASH_CONTRATO]
+Este documento foi assinado eletronicamente conforme MP 2.200-2/2001.
+Valide em: [VERIFICACAO_URL]`
   },
   {
     id: "condominium-admin",
@@ -590,7 +704,26 @@ Telefone: [TELEFONE_IMOBILIARIA]
 
 E por estarem assim justos e contratados, firmam o presente contrato.
 
-[CIDADE], [DATA_ASSINATURA]`
+[CIDADE], [DATA_ASSINATURA]
+
+---
+
+**ASSINATURAS DIGITAIS**
+
+**CONTRATANTE (CONDOMÍNIO):**
+[ASSINATURA_LOCADOR]
+
+**CONTRATADA (IMOBILIÁRIA):**
+[ASSINATURA_IMOBILIARIA]
+
+**TESTEMUNHA:**
+[ASSINATURA_TESTEMUNHA]
+
+---
+**Verificação de Autenticidade**
+Hash do Contrato: [HASH_CONTRATO]
+Este documento foi assinado eletronicamente conforme MP 2.200-2/2001.
+Valide em: [VERIFICACAO_URL]`
   }
 ];
 

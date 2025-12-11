@@ -126,6 +126,11 @@ export class CreateTenantDto {
   @IsString()
   phone?: string;
 
+  @ApiPropertyOptional({ example: '11999999999' })
+  @IsOptional()
+  @IsString()
+  mobilePhone?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -135,6 +140,16 @@ export class CreateTenantDto {
   @IsOptional()
   @IsString()
   address?: string;
+
+  @ApiPropertyOptional({ example: '123' })
+  @IsOptional()
+  @IsString()
+  number?: string;
+
+  @ApiPropertyOptional({ example: 'Apto 101' })
+  @IsOptional()
+  @IsString()
+  complement?: string;
 
   @ApiPropertyOptional({ example: '01001-000' })
   @IsOptional()
@@ -159,6 +174,46 @@ export class CreateTenantDto {
   @ApiPropertyOptional({ example: '1990-01-01' })
   @IsOptional()
   birthDate?: string;
+
+  @ApiPropertyOptional({ example: 'Brasileira' })
+  @IsOptional()
+  @IsString()
+  nationality?: string;
+
+  @ApiPropertyOptional({ example: 'Solteiro(a)' })
+  @IsOptional()
+  @IsString()
+  maritalStatus?: string;
+
+  @ApiPropertyOptional({ example: 'Engenheiro' })
+  @IsOptional()
+  @IsString()
+  profession?: string;
+
+  @ApiPropertyOptional({ example: 'Empresa XYZ' })
+  @IsOptional()
+  @IsString()
+  employerName?: string;
+
+  @ApiPropertyOptional({ example: '5000.00' })
+  @IsOptional()
+  @IsString()
+  monthlyIncome?: string;
+
+  @ApiPropertyOptional({ example: 'Observações sobre o inquilino' })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @ApiPropertyOptional({ example: 'Maria Silva' })
+  @IsOptional()
+  @IsString()
+  emergencyContactName?: string;
+
+  @ApiPropertyOptional({ example: '11999998888' })
+  @IsOptional()
+  @IsString()
+  emergencyContactPhone?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

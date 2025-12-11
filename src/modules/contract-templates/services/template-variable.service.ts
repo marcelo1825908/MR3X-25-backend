@@ -140,6 +140,14 @@ export class TemplateVariableService {
 
     // MR3X Platform Info
     { key: 'ENDERECO_MR3X', label: 'Endereço MR3X', source: 'system', required: false, description: 'Endereço da sede da MR3X' },
+
+    // Signature Variables
+    { key: 'ASSINATURA_LOCADOR', label: 'Assinatura do Locador', source: 'contract', required: false, description: 'Assinatura digital do locador com hash e IP' },
+    { key: 'ASSINATURA_LOCATARIO', label: 'Assinatura do Locatário', source: 'contract', required: false, description: 'Assinatura digital do locatário com hash e IP' },
+    { key: 'ASSINATURA_IMOBILIARIA', label: 'Assinatura da Imobiliária', source: 'contract', required: false, description: 'Assinatura digital da imobiliária com hash e IP' },
+    { key: 'ASSINATURA_TESTEMUNHA', label: 'Assinatura da Testemunha', source: 'contract', required: false, description: 'Assinatura digital da testemunha' },
+    { key: 'HASH_CONTRATO', label: 'Hash do Contrato', source: 'contract', required: false, description: 'Hash SHA-256 do contrato' },
+    { key: 'VERIFICACAO_URL', label: 'URL de Verificação', source: 'contract', required: false, description: 'URL para validação do contrato' },
   ];
 
   /**
@@ -360,9 +368,46 @@ export class TemplateVariableService {
           return this.formatCurrency(penalty);
         }
         return null;
+      case 'HASH_CONTRATO':
+        return contract.contractHash || contract.hashFinal || '[Hash será gerado após assinatura]';
+      case 'VERIFICACAO_URL':
+        return contract.verificationUrl || `https://mr3x.com.br/verificar/${contract.contractToken || '[token]'}`;
+      case 'ASSINATURA_LOCADOR':
+        return this.formatSignature('LOCADOR', contract.ownerSignedAt, contract.ownerSignedIP, contract.ownerSignature);
+      case 'ASSINATURA_LOCATARIO':
+        return this.formatSignature('LOCATÁRIO', contract.tenantSignedAt, contract.tenantSignedIP, contract.tenantSignature);
+      case 'ASSINATURA_IMOBILIARIA':
+        return this.formatSignature('IMOBILIÁRIA', contract.agencySignedAt, contract.agencySignedIP, contract.agencySignature);
+      case 'ASSINATURA_TESTEMUNHA':
+        if (contract.witnessName) {
+          return this.formatSignature(contract.witnessName, contract.witnessSignedAt, null, contract.witnessSignature);
+        }
+        return '[Aguardando assinatura da testemunha]';
       default:
         return null;
     }
+  }
+
+  private formatSignature(role: string, signedAt: Date | null, signedIP: string | null, signature: string | null): string {
+    if (!signedAt) {
+      return `[Aguardando assinatura do(a) ${role}]`;
+    }
+    const dateStr = this.formatDateTime(signedAt);
+    const ipStr = signedIP ? `IP: ${signedIP}` : '';
+    const hashStr = signature ? `Hash: ${signature.substring(0, 16)}...` : '';
+    return `✓ Assinado digitalmente por ${role}\n   Data/Hora: ${dateStr}\n   ${ipStr}\n   ${hashStr}`;
+  }
+
+  private formatDateTime(date: Date | string): string {
+    const d = typeof date === 'string' ? new Date(date) : date;
+    return d.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
   }
 
   private getBrokerValue(key: string, contract: any): string | null {

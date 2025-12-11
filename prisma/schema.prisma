@@ -179,6 +179,18 @@ model User {
   state         String?   @db.VarChar(10)
   userType      String?   @map("user_type") @db.VarChar(2)
 
+  // Additional tenant fields
+  mobilePhone          String?  @map("mobile_phone") @db.VarChar(30)
+  complement           String?  @db.VarChar(100)
+  nationality          String?  @db.VarChar(50)
+  maritalStatus        String?  @map("marital_status") @db.VarChar(30)
+  profession           String?  @db.VarChar(100)
+  employerName         String?  @map("employer_name") @db.VarChar(100)
+  monthlyIncome        String?  @map("monthly_income") @db.VarChar(50)
+  notes                String?  @db.Text
+  emergencyContactName  String?  @map("emergency_contact_name") @db.VarChar(100)
+  emergencyContactPhone String?  @map("emergency_contact_phone") @db.VarChar(30)
+
   // CRECI (Conselho Regional de Corretores de Imóveis) for brokers/inspectors
   creci           String?   @db.VarChar(30)
   creciState      String?   @map("creci_state") @db.VarChar(2)
@@ -397,6 +409,8 @@ model Contract {
   earlyPaymentDiscountDays       Int?     @default(0) @map("early_payment_discount_days")
   readjustmentIndex              String?  @default("IGPM") @map("readjustment_index") @db.VarChar(20)
   readjustmentMonth              Int?     @default(12) @map("readjustment_month")
+  jurisdiction                   String?  @map("jurisdiction") @db.VarChar(100)
+  guaranteeType                  String?  @default("Caução em dinheiro") @map("guarantee_type") @db.VarChar(100)
   tenant                         String?  @db.VarChar(50)
   pdfPath                        String?  @map("pdf_path") @db.VarChar(255)
   creci                          String?  @db.VarChar(50)
