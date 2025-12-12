@@ -30,8 +30,8 @@ export class ContractsService {
     private validationService: ContractValidationService,
   ) {}
 
-  async findAll(params: { skip?: number; take?: number; agencyId?: string; status?: string; createdById?: string; userId?: string }) {
-    const { skip = 0, take = 10, agencyId, status, createdById, userId } = params;
+  async findAll(params: { skip?: number; take?: number; agencyId?: string; status?: string; createdById?: string; userId?: string; search?: string }) {
+    const { skip = 0, take = 10, agencyId, status, createdById, userId, search } = params;
 
     const where: any = { deleted: false };
     if (status) where.status = status;
@@ -50,6 +50,24 @@ export class ContractsService {
         { property: { createdBy: BigInt(userId) } },
         { property: { ownerId: BigInt(userId) } },
       ];
+    }
+
+    // Add search filter
+    if (search && search.trim()) {
+      const searchConditions = [
+        { property: { name: { contains: search.trim() } } },
+        { property: { address: { contains: search.trim() } } },
+        { tenantUser: { name: { contains: search.trim() } } },
+        { ownerUser: { name: { contains: search.trim() } } },
+      ];
+
+      if (where.OR) {
+        // Combine existing OR conditions with search
+        where.AND = [{ OR: where.OR }, { OR: searchConditions }];
+        delete where.OR;
+      } else {
+        where.OR = searchConditions;
+      }
     }
 
     const [contracts, total] = await Promise.all([
