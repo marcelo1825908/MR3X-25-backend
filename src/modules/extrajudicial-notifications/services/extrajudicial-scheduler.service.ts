@@ -547,7 +547,7 @@ Em caso de não pagamento no prazo estipulado:
   private generateToken(): string {
     const year = new Date().getFullYear();
     const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
-    return `MR3X-NOT-${year}-${random}`;
+    return `MR3X-NEX-${year}-${random}`;
   }
 
   /**
@@ -556,7 +556,7 @@ Em caso de não pagamento no prazo estipulado:
   private generateNotificationNumber(): string {
     const year = new Date().getFullYear();
     const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
-    return `MR3X-NOT-${year}-${random}`;
+    return `MR3X-NEX-${year}-${random}`;
   }
 
   /**

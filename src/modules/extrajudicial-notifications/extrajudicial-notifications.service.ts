@@ -21,7 +21,7 @@ export class ExtrajudicialNotificationsService {
   private generateNotificationToken(): string {
     const year = new Date().getFullYear();
     const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
-    return `MR3X-NOT-${year}-${random}`;
+    return `MR3X-NEX-${year}-${random}`;
   }
 
   /**
@@ -30,7 +30,7 @@ export class ExtrajudicialNotificationsService {
   private generateNotificationNumber(): string {
     const year = new Date().getFullYear();
     const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
-    return `MR3X-NOT-${year}-${random}`;
+    return `MR3X-NEX-${year}-${random}`;
   }
 
   /**
