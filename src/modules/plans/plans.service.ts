@@ -317,14 +317,15 @@ export class PlansService {
       },
     });
 
-    // Count active internal users (exclude AGENCY_ADMIN as they are the agency owner)
+    // Count active users (exclude AGENCY_ADMIN as they are the agency owner)
+    // All user types count against the user limit: BROKER, PROPRIETARIO, INQUILINO, AGENCY_MANAGER
     const activeUsers = await this.prisma.user.count({
       where: {
         agencyId: BigInt(agencyId),
         isFrozen: false,
         status: 'ACTIVE',
         role: {
-          in: [UserRole.AGENCY_MANAGER, UserRole.BROKER, UserRole.PROPRIETARIO],
+          in: [UserRole.AGENCY_MANAGER, UserRole.BROKER, UserRole.PROPRIETARIO, UserRole.INQUILINO],
         },
       },
     });
@@ -335,7 +336,7 @@ export class PlansService {
         agencyId: BigInt(agencyId),
         isFrozen: true,
         role: {
-          in: [UserRole.AGENCY_MANAGER, UserRole.BROKER, UserRole.PROPRIETARIO],
+          in: [UserRole.AGENCY_MANAGER, UserRole.BROKER, UserRole.PROPRIETARIO, UserRole.INQUILINO],
         },
       },
     });
@@ -435,6 +436,103 @@ export class PlansService {
       allowed: true,
       requiresPayment: true,
       price: planConfig.settlementPrice || 6.90,
+    };
+  }
+
+  /**
+   * Check if agency can create a new tenant (counts towards user limit)
+   * Tenants are users like BROKER, PROPRIETARIO, etc. - all count towards maxInternalUsers
+   */
+  async canCreateTenant(agencyId: string): Promise<{ allowed: boolean; message?: string; current: number; limit: number }> {
+    const agency = await this.prisma.agency.findUnique({
+      where: { id: BigInt(agencyId) },
+      select: { plan: true },
+    });
+
+    const planName = agency?.plan || 'FREE';
+    const planConfig = getPlanConfigByName(planName) || PLANS_CONFIG.FREE;
+
+    // Count ALL active users in the agency (all user types count against the limit)
+    const userCount = await this.prisma.user.count({
+      where: {
+        agencyId: BigInt(agencyId),
+        status: 'ACTIVE',
+        isFrozen: false,
+        role: {
+          in: [UserRole.AGENCY_MANAGER, UserRole.BROKER, UserRole.PROPRIETARIO, UserRole.INQUILINO],
+        },
+      },
+    });
+
+    // Use maxInternalUsers limit (all users count)
+    const limit = planConfig.maxInternalUsers === -1 ? 9999 : planConfig.maxInternalUsers;
+
+    // -1 or 9999 means unlimited
+    if (limit >= 9999) {
+      return { allowed: true, current: userCount, limit: 9999 };
+    }
+
+    if (userCount < limit) {
+      return { allowed: true, current: userCount, limit };
+    }
+
+    return {
+      allowed: false,
+      message: `Você atingiu o limite de ${limit} usuário(s) do plano ${planConfig.displayName}. Faça upgrade para adicionar mais usuários.`,
+      current: userCount,
+      limit,
+    };
+  }
+
+  /**
+   * Check if user (INDEPENDENT_OWNER) can create a new tenant (counts towards user limit)
+   * Tenants are users - all count towards maxInternalUsers for the owner
+   */
+  async canCreateTenantForOwner(userId: string): Promise<{ allowed: boolean; message?: string; current: number; limit: number }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: BigInt(userId) },
+      select: { plan: true, role: true },
+    });
+
+    if (!user) {
+      return { allowed: false, message: 'Usuário não encontrado', current: 0, limit: 0 };
+    }
+
+    const planName = user.plan || 'FREE';
+    const planConfig = getPlanConfigByName(planName) || PLANS_CONFIG.FREE;
+
+    // Count ALL active users created by this owner (tenants are users)
+    const userCount = await this.prisma.user.count({
+      where: {
+        OR: [
+          { ownerId: BigInt(userId) },
+          { createdBy: BigInt(userId) },
+        ],
+        status: 'ACTIVE',
+        isFrozen: false,
+        role: {
+          in: [UserRole.INQUILINO, UserRole.BUILDING_MANAGER],
+        },
+      },
+    });
+
+    // Use maxInternalUsers limit (tenants count as users)
+    const limit = planConfig.maxInternalUsers === -1 ? 9999 : planConfig.maxInternalUsers;
+
+    // -1 or 9999 means unlimited
+    if (limit >= 9999) {
+      return { allowed: true, current: userCount, limit: 9999 };
+    }
+
+    if (userCount < limit) {
+      return { allowed: true, current: userCount, limit };
+    }
+
+    return {
+      allowed: false,
+      message: `Você atingiu o limite de ${limit} usuário(s) do plano ${planConfig.displayName}. Faça upgrade para adicionar mais usuários.`,
+      current: userCount,
+      limit,
     };
   }
 

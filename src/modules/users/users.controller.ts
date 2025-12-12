@@ -42,7 +42,10 @@ export class UsersController {
     //   - All AGENCY_ADMIN users (for "Diretor Agência" page)
     //   - All INDEPENDENT_OWNER users (for "Agências" page)
     //   - Only users they created for other roles
+    // AGENCY_ADMIN/AGENCY_MANAGER sees all users in their agency (including tenants)
     let createdById: string | undefined;
+    let finalAgencyId: string | undefined = agencyId;
+
     if (user?.role === UserRole.ADMIN) {
       // If filtering by AGENCY_ADMIN or INDEPENDENT_OWNER role, ADMIN can see all
       if (role === UserRole.AGENCY_ADMIN || role === UserRole.INDEPENDENT_OWNER) {
@@ -50,12 +53,24 @@ export class UsersController {
       } else {
         createdById = user.sub; // For other roles, only see users they created
       }
+    } else if (user?.role === UserRole.AGENCY_ADMIN || user?.role === UserRole.AGENCY_MANAGER) {
+      // Agency users see all users in their agency (including tenants)
+      if (user.agencyId) {
+        finalAgencyId = user.agencyId.toString();
+      }
+      console.log('[findAll] AGENCY user:', user.role, 'agencyId:', user.agencyId, 'finalAgencyId:', finalAgencyId);
+    } else if (user?.role === UserRole.BROKER) {
+      // Brokers see users they created
+      createdById = user.sub;
+    } else if (user?.role === UserRole.PROPRIETARIO || user?.role === UserRole.INDEPENDENT_OWNER) {
+      // Owners see users they created (their tenants)
+      createdById = user.sub;
     }
 
     // Exclude current user from results if requested
     const excludeUserId = excludeCurrentUser === 'true' ? user.sub : undefined;
 
-    return this.usersService.findAll({ skip, take, search, role, agencyId, status, plan, createdById, excludeUserId });
+    return this.usersService.findAll({ skip, take, search, role, agencyId: finalAgencyId, status, plan, createdById, excludeUserId });
   }
 
   @Get('details')

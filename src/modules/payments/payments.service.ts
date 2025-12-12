@@ -7,7 +7,7 @@ import { UpdatePaymentDto } from './dto/update-payment.dto';
 export class PaymentsService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(userId: string, role: string, userAgencyId?: string, userBrokerId?: string) {
+  async findAll(userId: string, role: string, userAgencyId?: string, userBrokerId?: string, search?: string) {
     try {
       const where: any = {};
 
@@ -62,6 +62,16 @@ export class PaymentsService {
       // Other roles have no access
       else {
         where.id = BigInt(-1); // This will return no results
+      }
+
+      // Add search filter
+      if (search && search.trim()) {
+        where.OR = [
+          { property: { name: { contains: search.trim() } } },
+          { property: { address: { contains: search.trim() } } },
+          { user: { name: { contains: search.trim() } } },
+          { description: { contains: search.trim() } },
+        ];
       }
 
       const payments = await this.prisma.payment.findMany({

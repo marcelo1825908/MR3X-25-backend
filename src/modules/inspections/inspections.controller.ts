@@ -54,6 +54,7 @@ export class InspectionsController {
   @ApiQuery({ name: 'inspectorId', required: false, type: String })
   @ApiQuery({ name: 'startDate', required: false, type: String })
   @ApiQuery({ name: 'endDate', required: false, type: String })
+  @ApiQuery({ name: 'search', required: false, type: String })
   async findAll(
     @Query('skip') skip?: number,
     @Query('take') take?: number,
@@ -65,6 +66,7 @@ export class InspectionsController {
     @Query('inspectorId') inspectorId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('search') search?: string,
     @CurrentUser() user?: any,
   ) {
     // Data isolation based on role
@@ -99,6 +101,7 @@ export class InspectionsController {
       createdById,
       startDate,
       endDate,
+      search,
     });
   }
 

@@ -38,6 +38,7 @@ export class AgreementsService {
     ownerId?: string;
     startDate?: string;
     endDate?: string;
+    search?: string;
     accessFilter?: any;      // Permission-based filter from AgreementPermissionService
     userContext?: UserContext;
   }) {
@@ -53,6 +54,7 @@ export class AgreementsService {
       ownerId,
       startDate,
       endDate,
+      search,
       accessFilter,
       userContext,
     } = params;
@@ -76,6 +78,17 @@ export class AgreementsService {
       where.createdAt = {};
       if (startDate) where.createdAt.gte = new Date(startDate);
       if (endDate) where.createdAt.lte = new Date(endDate);
+    }
+
+    // Add search filter
+    if (search && search.trim()) {
+      where.OR = [
+        { title: { contains: search.trim() } },
+        { property: { name: { contains: search.trim() } } },
+        { property: { address: { contains: search.trim() } } },
+        { tenant: { name: { contains: search.trim() } } },
+        { owner: { name: { contains: search.trim() } } },
+      ];
     }
 
     const [agreements, total] = await Promise.all([

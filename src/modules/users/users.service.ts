@@ -114,6 +114,9 @@ export class UsersService {
     if (createdById) where.createdBy = BigInt(createdById);
     if (excludeUserId) where.id = { not: BigInt(excludeUserId) };
 
+    console.log('[UsersService.findAll] Query params:', { skip, take, search, role, agencyId, status, plan, createdById, excludeUserId });
+    console.log('[UsersService.findAll] Where clause:', JSON.stringify(where, (key, value) => typeof value === 'bigint' ? value.toString() : value));
+
     // Add search filter for name, email, document, or phone
     // MySQL's default collation is case-insensitive, so no mode needed
     if (search && search.trim()) {
@@ -817,13 +820,20 @@ export class UsersService {
             neighborhood: true,
             city: true,
             state: true,
+            role: true,
+            status: true,
+            isFrozen: true,
+            agencyId: true,
             createdAt: true,
+            createdBy: true,
           },
         });
 
         return tenants.map(tenant => ({
           ...tenant,
           id: tenant.id.toString(),
+          agencyId: tenant.agencyId?.toString() || null,
+          createdBy: tenant.createdBy?.toString() || null,
           birthDate: tenant.birthDate?.toISOString() || null,
           createdAt: tenant.createdAt?.toISOString() || null,
         }));
@@ -914,6 +924,10 @@ export class UsersService {
         neighborhood: true,
         city: true,
         state: true,
+        role: true,
+        status: true,
+        isFrozen: true,
+        agencyId: true,
         createdAt: true,
         createdBy: true,
       },
@@ -928,10 +942,12 @@ export class UsersService {
 
       // Serialize BigInt fields
       const result = tenants.map(tenant => {
-        const { createdBy, ...rest } = tenant;
+        const { createdBy, agencyId, ...rest } = tenant;
         return {
           ...rest,
           id: tenant.id.toString(),
+          agencyId: agencyId?.toString() || null,
+          createdBy: createdBy?.toString() || null,
           birthDate: tenant.birthDate?.toISOString() || null,
           createdAt: tenant.createdAt?.toISOString() || null,
         };

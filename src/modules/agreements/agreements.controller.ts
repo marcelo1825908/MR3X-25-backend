@@ -72,6 +72,7 @@ export class AgreementsController {
   @ApiQuery({ name: 'ownerId', required: false, type: String })
   @ApiQuery({ name: 'startDate', required: false, type: String })
   @ApiQuery({ name: 'endDate', required: false, type: String })
+  @ApiQuery({ name: 'search', required: false, type: String })
   async findAll(
     @Query('skip') skip?: number,
     @Query('take') take?: number,
@@ -84,6 +85,7 @@ export class AgreementsController {
     @Query('ownerId') ownerId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('search') search?: string,
     @CurrentUser() user?: any,
   ) {
     // Build user context for permission-based filtering
@@ -112,6 +114,7 @@ export class AgreementsController {
       ownerId,
       startDate,
       endDate,
+      search,
       accessFilter, // Pass the permission-based filter
       userContext,  // Pass user context for additional filtering logic
     });

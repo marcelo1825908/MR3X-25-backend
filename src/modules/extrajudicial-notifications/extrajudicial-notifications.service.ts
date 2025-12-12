@@ -156,6 +156,7 @@ export class ExtrajudicialNotificationsService {
     endDate?: string;
     createdById?: string;
     userId?: string; // Current user ID to show notifications where they are debtor
+    search?: string;
   }) {
     const {
       skip = 0,
@@ -171,6 +172,7 @@ export class ExtrajudicialNotificationsService {
       endDate,
       createdById,
       userId,
+      search,
     } = params;
 
     const where: any = {};
@@ -204,6 +206,22 @@ export class ExtrajudicialNotificationsService {
       where.createdAt = {};
       if (startDate) where.createdAt.gte = new Date(startDate);
       if (endDate) where.createdAt.lte = new Date(endDate);
+    }
+
+    // Add search filter
+    if (search && search.trim()) {
+      where.AND = [
+        ...(where.AND || []),
+        {
+          OR: [
+            { creditorName: { contains: search.trim() } },
+            { debtorName: { contains: search.trim() } },
+            { title: { contains: search.trim() } },
+            { property: { address: { contains: search.trim() } } },
+            { property: { name: { contains: search.trim() } } },
+          ],
+        },
+      ];
     }
 
     const [notifications, total] = await Promise.all([

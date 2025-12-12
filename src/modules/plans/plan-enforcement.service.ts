@@ -209,14 +209,14 @@ export class PlanEnforcementService {
 
     // For create, check if agency has reached user limit
     if (operation === 'create') {
-      // Count internal users (exclude AGENCY_ADMIN as they are the agency owner)
+      // Count all users (exclude AGENCY_ADMIN as they are the agency owner)
       const activeUserCount = await this.prisma.user.count({
         where: {
           agencyId: BigInt(agencyId),
           isFrozen: false,
           status: 'ACTIVE',
           role: {
-            in: [UserRole.AGENCY_MANAGER, UserRole.BROKER, UserRole.PROPRIETARIO],
+            in: [UserRole.AGENCY_MANAGER, UserRole.BROKER, UserRole.PROPRIETARIO, UserRole.INQUILINO],
           },
         },
       });
@@ -996,7 +996,7 @@ export class PlanEnforcementService {
         isFrozen: false,
         status: 'ACTIVE',
         role: {
-          in: [UserRole.AGENCY_MANAGER, UserRole.BROKER, UserRole.PROPRIETARIO],
+          in: [UserRole.AGENCY_MANAGER, UserRole.BROKER, UserRole.PROPRIETARIO, UserRole.INQUILINO],
         },
       },
     });
@@ -1634,20 +1634,20 @@ export class PlanEnforcementService {
           agencyId: BigInt(agencyId),
           isFrozen: false,
           status: 'ACTIVE',
-          role: { in: [UserRole.AGENCY_MANAGER, UserRole.BROKER, UserRole.PROPRIETARIO] },
+          role: { in: [UserRole.AGENCY_MANAGER, UserRole.BROKER, UserRole.PROPRIETARIO, UserRole.INQUILINO] },
         },
       }),
       this.prisma.user.count({
         where: {
           agencyId: BigInt(agencyId),
           isFrozen: true,
-          role: { in: [UserRole.AGENCY_MANAGER, UserRole.BROKER, UserRole.PROPRIETARIO] },
+          role: { in: [UserRole.AGENCY_MANAGER, UserRole.BROKER, UserRole.PROPRIETARIO, UserRole.INQUILINO] },
         },
       }),
       this.prisma.user.count({
         where: {
           agencyId: BigInt(agencyId),
-          role: { in: [UserRole.AGENCY_MANAGER, UserRole.BROKER, UserRole.PROPRIETARIO] },
+          role: { in: [UserRole.AGENCY_MANAGER, UserRole.BROKER, UserRole.PROPRIETARIO, UserRole.INQUILINO] },
         },
       }),
     ]);
@@ -1789,7 +1789,7 @@ export class PlanEnforcementService {
         agencyId: BigInt(agencyId),
         isFrozen: false,
         status: 'ACTIVE',
-        role: { in: [UserRole.AGENCY_MANAGER, UserRole.BROKER, UserRole.PROPRIETARIO] },
+        role: { in: [UserRole.AGENCY_MANAGER, UserRole.BROKER, UserRole.PROPRIETARIO, UserRole.INQUILINO] },
       },
     });
 

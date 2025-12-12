@@ -42,6 +42,7 @@ export class InspectionsService {
     createdById?: string;
     startDate?: string;
     endDate?: string;
+    search?: string;
   }) {
     const {
       skip = 0,
@@ -55,6 +56,7 @@ export class InspectionsService {
       createdById,
       startDate,
       endDate,
+      search,
     } = params;
 
     const where: any = {};
@@ -71,6 +73,16 @@ export class InspectionsService {
       where.date = {};
       if (startDate) where.date.gte = new Date(startDate);
       if (endDate) where.date.lte = new Date(endDate);
+    }
+
+    // Add search filter
+    if (search && search.trim()) {
+      where.OR = [
+        { property: { name: { contains: search.trim() } } },
+        { property: { address: { contains: search.trim() } } },
+        { inspector: { name: { contains: search.trim() } } },
+        { notes: { contains: search.trim() } },
+      ];
     }
 
     const [inspections, total] = await Promise.all([

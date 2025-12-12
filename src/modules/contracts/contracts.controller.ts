@@ -69,6 +69,7 @@ export class ContractsController {
     @Query('take') take?: number,
     @Query('agencyId') agencyId?: string,
     @Query('status') status?: string,
+    @Query('search') search?: string,
     @CurrentUser() user?: any,
   ) {
     // Data isolation based on role:
@@ -100,7 +101,7 @@ export class ContractsController {
       userId = user?.sub;
     }
 
-    return this.contractsService.findAll({ skip, take, agencyId: effectiveAgencyId, status, createdById, userId });
+    return this.contractsService.findAll({ skip, take, agencyId: effectiveAgencyId, status, createdById, userId, search });
   }
 
   @Get(':id')

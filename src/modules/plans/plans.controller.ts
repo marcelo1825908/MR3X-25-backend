@@ -162,6 +162,20 @@ export class PlansController {
     return this.plansService.canCreateSettlement(agencyId);
   }
 
+  @Get('agency/:agencyId/can-create-tenant')
+  @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.AGENCY_ADMIN, UserRole.AGENCY_MANAGER, UserRole.BROKER)
+  @ApiOperation({ summary: 'Check if agency can create a new tenant' })
+  async canCreateTenant(@Param('agencyId') agencyId: string) {
+    return this.plansService.canCreateTenant(agencyId);
+  }
+
+  @Get('user/:userId/can-create-tenant')
+  @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.INDEPENDENT_OWNER, UserRole.PROPRIETARIO)
+  @ApiOperation({ summary: 'Check if owner can create a new tenant' })
+  async canCreateTenantForOwner(@Param('userId') userId: string) {
+    return this.plansService.canCreateTenantForOwner(userId);
+  }
+
   @Get('agency/:agencyId/screening-price')
   @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.AGENCY_ADMIN, UserRole.AGENCY_MANAGER, UserRole.BROKER)
   @ApiOperation({ summary: 'Get tenant screening price for agency' })

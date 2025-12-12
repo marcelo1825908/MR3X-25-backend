@@ -19,13 +19,15 @@ export class PaymentsController {
 
   @Get()
   @ApiOperation({ summary: 'List all payments' })
+  @ApiQuery({ name: 'search', required: false, type: String })
   async findAll(
     @CurrentUser('sub') userId: string,
     @CurrentUser('role') role: string,
     @CurrentUser('agencyId') agencyId?: string,
     @CurrentUser('brokerId') brokerId?: string,
+    @Query('search') search?: string,
   ) {
-    return this.paymentsService.findAll(userId, role, agencyId, brokerId);
+    return this.paymentsService.findAll(userId, role, agencyId, brokerId, search);
   }
 
   @Get('reports/annual')
