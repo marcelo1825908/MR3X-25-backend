@@ -90,15 +90,16 @@ export class UsersController {
   @Get('tenants')
   @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.PROPRIETARIO, UserRole.INDEPENDENT_OWNER, UserRole.AGENCY_ADMIN, UserRole.AGENCY_MANAGER, UserRole.BROKER)
   @ApiOperation({ summary: 'Get tenants based on user scope' })
-  async getTenants(@CurrentUser() user: any) {
+  async getTenants(@CurrentUser() user: any, @Query('search') search?: string) {
     try {
       console.log('[UsersController.getTenants] User:', JSON.stringify(user, null, 2));
+      console.log('[UsersController.getTenants] Search:', search);
 
       const scope: any = {};
 
       // CEO sees all tenants (platform-wide view)
       if (user?.role === UserRole.CEO) {
-        return await this.usersService.getTenantsByScope({});
+        return await this.usersService.getTenantsByScope({}, search);
       }
 
       // ADMIN sees only tenants they created (each admin is independent)
@@ -133,7 +134,7 @@ export class UsersController {
       }
 
       console.log('[UsersController.getTenants] Scope:', JSON.stringify(scope, null, 2));
-      return await this.usersService.getTenantsByScope(scope);
+      return await this.usersService.getTenantsByScope(scope, search);
     } catch (error) {
       console.error('[UsersController.getTenants] Error:', error);
       console.error('[UsersController.getTenants] Error stack:', error?.stack);

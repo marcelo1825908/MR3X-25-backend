@@ -798,14 +798,29 @@ export class UsersService {
     };
   }
 
-  async getTenantsByScope(scope: { ownerId?: string; agencyId?: string; brokerId?: string; managerId?: string; createdById?: string }) {
+  async getTenantsByScope(scope: { ownerId?: string; agencyId?: string; brokerId?: string; managerId?: string; createdById?: string }, search?: string) {
     try {
       console.log('[UsersService.getTenantsByScope] Scope:', JSON.stringify(scope, null, 2));
+      console.log('[UsersService.getTenantsByScope] Search:', search);
+
+      // Build search condition if search query is provided
+      // Note: MySQL is case-insensitive by default with utf8 collation, no need for 'mode'
+      const searchCondition = search ? {
+        OR: [
+          { name: { contains: search } },
+          { email: { contains: search } },
+          { document: { contains: search } },
+          { phone: { contains: search } },
+        ],
+      } : null;
 
       // If no scope is provided (CEO), return all tenants
       if (!scope.ownerId && !scope.agencyId && !scope.brokerId && !scope.managerId && !scope.createdById) {
         const tenants = await this.prisma.user.findMany({
-          where: { role: UserRole.INQUILINO },
+          where: {
+            role: UserRole.INQUILINO,
+            ...(searchCondition ? { AND: [searchCondition] } : {}),
+          },
           orderBy: { createdAt: 'desc' },
           select: {
             id: true,
@@ -839,7 +854,10 @@ export class UsersService {
         }));
       }
 
-    let where: any = { role: UserRole.INQUILINO };
+    let where: any = {
+      role: UserRole.INQUILINO,
+      ...(searchCondition ? { AND: [searchCondition] } : {}),
+    };
 
     // ADMIN: sees only tenants they created (each admin is independent)
     if (scope.createdById) {
@@ -886,6 +904,7 @@ export class UsersService {
           AND: [
             { role: UserRole.INQUILINO },
             { agencyId: BigInt(scope.agencyId) },
+            ...(search ? [searchCondition] : []),
           ],
         };
       } else {
@@ -899,6 +918,7 @@ export class UsersService {
                 ...(agencyBrokerIds.length > 0 ? [{ createdBy: { in: agencyBrokerIds } }] : []),
               ],
             },
+            ...(search ? [searchCondition] : []),
           ],
         };
       }
