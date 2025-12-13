@@ -3,9 +3,11 @@ import { PrismaService } from '../../config/prisma.service';
 import { PlansService } from '../plans/plans.service';
 import { PlanEnforcementService, PLAN_MESSAGES } from '../plans/plan-enforcement.service';
 import { TokenGeneratorService, TokenEntityType } from '../common/services/token-generator.service';
-import { CreateUserDto, UpdateUserDto, CreateTenantDto, UpdateTenantDto } from './dto/user.dto';
+import { CreateUserDto, UpdateUserDto, CreateTenantDto, UpdateTenantDto, UpdateProfileDto } from './dto/user.dto';
 import * as bcrypt from 'bcryptjs';
 import { UserRole } from '@prisma/client';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * Role Creation Hierarchy - Who can create which roles
@@ -292,12 +294,16 @@ export class UsersService {
       ownerId = BigInt(creatorId);
     }
 
-    // Generate MR3X token for INQUILINO (tenants) and PROPRIETARIO/INDEPENDENT_OWNER (owners)
+    // Generate MR3X token based on user role
     let token: string | null = null;
     if (dto.role === 'INQUILINO') {
       token = await this.tokenGenerator.generateToken(TokenEntityType.TENANT);
     } else if (dto.role === 'PROPRIETARIO' || dto.role === 'INDEPENDENT_OWNER') {
       token = await this.tokenGenerator.generateToken(TokenEntityType.OWNER);
+    } else if (dto.role === 'BROKER') {
+      token = await this.tokenGenerator.generateToken(TokenEntityType.BROKER);
+    } else if (dto.role === 'AGENCY_MANAGER') {
+      token = await this.tokenGenerator.generateToken(TokenEntityType.MANAGER);
     }
 
     const user = await this.prisma.user.create({
@@ -323,6 +329,10 @@ export class UsersService {
         birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
         brokerId: dto.managerId ? BigInt(dto.managerId) : null,
         status: 'ACTIVE',
+        nationality: dto.nationality,
+        maritalStatus: dto.maritalStatus,
+        profession: dto.profession,
+        rg: dto.rg,
       },
     });
 
@@ -379,6 +389,10 @@ export class UsersService {
       updateData.birthDate = dto.birthDate ? new Date(dto.birthDate) : null;
     }
     if (dto.status !== undefined) updateData.status = dto.status;
+    if (dto.nationality !== undefined) updateData.nationality = dto.nationality;
+    if (dto.maritalStatus !== undefined) updateData.maritalStatus = dto.maritalStatus;
+    if (dto.profession !== undefined) updateData.profession = dto.profession;
+    if (dto.rg !== undefined) updateData.rg = dto.rg;
 
     if (dto.password) {
       updateData.password = await bcrypt.hash(dto.password, 10);
@@ -787,6 +801,159 @@ export class UsersService {
     return { message: 'Password changed successfully' };
   }
 
+  // ===== Profile Methods =====
+
+  async getProfile(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: BigInt(userId) },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        plan: true,
+        phone: true,
+        document: true,
+        address: true,
+        cep: true,
+        neighborhood: true,
+        city: true,
+        state: true,
+        photoUrl: true,
+        creci: true,
+        agencyId: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return {
+      ...user,
+      id: user.id.toString(),
+      agencyId: user.agencyId?.toString() || null,
+      createdAt: user.createdAt?.toISOString() || null,
+    };
+  }
+
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: BigInt(userId) },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const updateData: any = {};
+
+    if (dto.name !== undefined) updateData.name = dto.name;
+    if (dto.phone !== undefined) updateData.phone = dto.phone;
+    if (dto.document !== undefined) updateData.document = dto.document;
+    if (dto.address !== undefined) updateData.address = dto.address;
+
+    const updated = await this.prisma.user.update({
+      where: { id: BigInt(userId) },
+      data: updateData,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        plan: true,
+        phone: true,
+        document: true,
+        address: true,
+        photoUrl: true,
+      },
+    });
+
+    return {
+      ...updated,
+      id: updated.id.toString(),
+    };
+  }
+
+  async uploadProfilePhoto(userId: string, file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: BigInt(userId) },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Validate file type
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      throw new BadRequestException('Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.');
+    }
+
+    // Create uploads directory if it doesn't exist
+    const uploadsDir = path.join(process.cwd(), 'uploads', 'profiles');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    // Generate unique filename
+    const fileExtension = path.extname(file.originalname);
+    const filename = `${userId}-${Date.now()}${fileExtension}`;
+    const filePath = path.join(uploadsDir, filename);
+
+    // Delete old photo if exists
+    if (user.photoUrl) {
+      const oldFilename = user.photoUrl.split('/').pop();
+      const oldFilePath = path.join(uploadsDir, oldFilename || '');
+      if (fs.existsSync(oldFilePath)) {
+        fs.unlinkSync(oldFilePath);
+      }
+    }
+
+    // Save new file
+    fs.writeFileSync(filePath, file.buffer);
+
+    // Update user with new photo URL
+    const photoUrl = `/uploads/profiles/${filename}`;
+    await this.prisma.user.update({
+      where: { id: BigInt(userId) },
+      data: { photoUrl },
+    });
+
+    return { photoUrl, message: 'Photo uploaded successfully' };
+  }
+
+  async deleteProfilePhoto(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: BigInt(userId) },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.photoUrl) {
+      const uploadsDir = path.join(process.cwd(), 'uploads', 'profiles');
+      const filename = user.photoUrl.split('/').pop();
+      const filePath = path.join(uploadsDir, filename || '');
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+
+    await this.prisma.user.update({
+      where: { id: BigInt(userId) },
+      data: { photoUrl: null },
+    });
+
+    return { message: 'Photo deleted successfully' };
+  }
+
   async validateDocument(document: string) {
     const existingUser = await this.prisma.user.findFirst({
       where: { document },
@@ -824,6 +991,7 @@ export class UsersService {
           orderBy: { createdAt: 'desc' },
           select: {
             id: true,
+            token: true,
             email: true,
             name: true,
             phone: true,
@@ -841,6 +1009,10 @@ export class UsersService {
             agencyId: true,
             createdAt: true,
             createdBy: true,
+            nationality: true,
+            maritalStatus: true,
+            profession: true,
+            rg: true,
           },
         });
 
@@ -933,6 +1105,7 @@ export class UsersService {
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
+        token: true,
         email: true,
         name: true,
         phone: true,
@@ -950,6 +1123,10 @@ export class UsersService {
         agencyId: true,
         createdAt: true,
         createdBy: true,
+        nationality: true,
+        maritalStatus: true,
+        profession: true,
+        rg: true,
       },
     });
 
@@ -1038,8 +1215,12 @@ export class UsersService {
       finalBrokerId = dto.brokerId ? BigInt(dto.brokerId) : null;
     }
 
+    // Generate MR3X token for tenant
+    const token = await this.tokenGenerator.generateToken(TokenEntityType.TENANT);
+
     const tenant = await this.prisma.user.create({
       data: {
+        token,
         email: dto.email,
         password: hashedPassword,
         plainPassword: dto.password,
@@ -1047,7 +1228,6 @@ export class UsersService {
         role: UserRole.INQUILINO,
         plan: dto.plan || 'FREE',
         phone: dto.phone,
-        mobilePhone: dto.mobilePhone,
         document: dto.document,
         address: dto.address,
         number: dto.number,
@@ -1060,9 +1240,8 @@ export class UsersService {
         nationality: dto.nationality,
         maritalStatus: dto.maritalStatus,
         profession: dto.profession,
+        rg: dto.rg,
         employerName: dto.employerName,
-        monthlyIncome: dto.monthlyIncome,
-        notes: dto.notes,
         emergencyContactName: dto.emergencyContactName,
         emergencyContactPhone: dto.emergencyContactPhone,
         status: 'ACTIVE',
@@ -1073,6 +1252,7 @@ export class UsersService {
       },
       select: {
         id: true,
+        token: true,
         email: true,
         name: true,
         phone: true,
@@ -1094,6 +1274,7 @@ export class UsersService {
     return {
       ...tenant,
       id: tenant.id.toString(),
+      token: tenant.token,
       agencyId: tenant.agencyId?.toString() || null,
       brokerId: tenant.brokerId?.toString() || null,
       createdBy: tenant.createdBy?.toString() || null,
@@ -1117,7 +1298,14 @@ export class UsersService {
 
     const updateData: any = {};
 
+    // Generate token for existing tenants that don't have one
+    if (!tenant.token) {
+      updateData.token = await this.tokenGenerator.generateToken(TokenEntityType.TENANT);
+    }
+
     if (dto.name !== undefined) updateData.name = dto.name;
+    if (dto.email !== undefined) updateData.email = dto.email;
+    if (dto.document !== undefined) updateData.document = dto.document;
     if (dto.phone !== undefined) updateData.phone = dto.phone;
     if (dto.password !== undefined && dto.password.length > 0) {
       updateData.password = await bcrypt.hash(dto.password, 10);
@@ -1131,6 +1319,10 @@ export class UsersService {
     if (dto.birthDate !== undefined) {
       updateData.birthDate = dto.birthDate ? new Date(dto.birthDate) : null;
     }
+    if (dto.nationality !== undefined) updateData.nationality = dto.nationality;
+    if (dto.maritalStatus !== undefined) updateData.maritalStatus = dto.maritalStatus;
+    if (dto.profession !== undefined) updateData.profession = dto.profession;
+    if (dto.rg !== undefined) updateData.rg = dto.rg;
     // Allow Manager/Admin to link broker to tenant
     if (dto.brokerId !== undefined) {
       updateData.brokerId = dto.brokerId ? BigInt(dto.brokerId) : null;
@@ -1141,6 +1333,7 @@ export class UsersService {
       data: updateData,
       select: {
         id: true,
+        token: true,
         email: true,
         name: true,
         phone: true,
@@ -1155,12 +1348,17 @@ export class UsersService {
         agencyId: true,
         brokerId: true,
         plainPassword: true,
+        nationality: true,
+        maritalStatus: true,
+        profession: true,
+        rg: true,
       },
     });
 
     return {
       ...updated,
       id: updated.id.toString(),
+      token: updated.token,
       agencyId: updated.agencyId?.toString() || null,
       brokerId: updated.brokerId?.toString() || null,
       birthDate: updated.birthDate?.toISOString() || null,

@@ -88,6 +88,26 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   status?: string;
+
+  @ApiPropertyOptional({ example: 'Brasileira' })
+  @IsOptional()
+  @IsString()
+  nationality?: string;
+
+  @ApiPropertyOptional({ example: 'Solteiro(a)' })
+  @IsOptional()
+  @IsString()
+  maritalStatus?: string;
+
+  @ApiPropertyOptional({ example: 'Empresário' })
+  @IsOptional()
+  @IsString()
+  profession?: string;
+
+  @ApiPropertyOptional({ example: '00.000.000-0' })
+  @IsOptional()
+  @IsString()
+  rg?: string;
 }
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {}
@@ -125,11 +145,6 @@ export class CreateTenantDto {
   @IsOptional()
   @IsString()
   phone?: string;
-
-  @ApiPropertyOptional({ example: '11999999999' })
-  @IsOptional()
-  @IsString()
-  mobilePhone?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -190,20 +205,15 @@ export class CreateTenantDto {
   @IsString()
   profession?: string;
 
+  @ApiPropertyOptional({ example: '00.000.000-0' })
+  @IsOptional()
+  @IsString()
+  rg?: string;
+
   @ApiPropertyOptional({ example: 'Empresa XYZ' })
   @IsOptional()
   @IsString()
   employerName?: string;
-
-  @ApiPropertyOptional({ example: '5000.00' })
-  @IsOptional()
-  @IsString()
-  monthlyIncome?: string;
-
-  @ApiPropertyOptional({ example: 'Observações sobre o inquilino' })
-  @IsOptional()
-  @IsString()
-  notes?: string;
 
   @ApiPropertyOptional({ example: 'Maria Silva' })
   @IsOptional()
@@ -231,6 +241,16 @@ export class UpdateTenantDto {
   @IsOptional()
   @IsString()
   name?: string;
+
+  @ApiPropertyOptional({ example: 'tenant@example.com' })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiPropertyOptional({ example: '12345678900' })
+  @IsOptional()
+  @IsString()
+  document?: string;
 
   @ApiPropertyOptional({ example: '11999999999' })
   @IsOptional()
@@ -272,6 +292,26 @@ export class UpdateTenantDto {
   @IsString()
   state?: string;
 
+  @ApiPropertyOptional({ example: 'Brasileira' })
+  @IsOptional()
+  @IsString()
+  nationality?: string;
+
+  @ApiPropertyOptional({ example: 'Solteiro(a)' })
+  @IsOptional()
+  @IsString()
+  maritalStatus?: string;
+
+  @ApiPropertyOptional({ example: 'Engenheiro' })
+  @IsOptional()
+  @IsString()
+  profession?: string;
+
+  @ApiPropertyOptional({ example: '00.000.000-0' })
+  @IsOptional()
+  @IsString()
+  rg?: string;
+
   @ApiPropertyOptional({ description: 'Broker ID to link tenant to a broker' })
   @IsOptional()
   @IsString()
@@ -287,4 +327,26 @@ export class ChangePasswordDto {
   @IsString()
   @MinLength(6)
   newPassword: string;
+}
+
+export class UpdateProfileDto {
+  @ApiPropertyOptional({ example: 'John Doe' })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional({ example: '11999999999' })
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @ApiPropertyOptional({ example: '12345678900' })
+  @IsOptional()
+  @IsString()
+  document?: string;
+
+  @ApiPropertyOptional({ example: 'Rua Example, 123' })
+  @IsOptional()
+  @IsString()
+  address?: string;
 }

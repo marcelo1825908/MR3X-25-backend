@@ -139,6 +139,11 @@ export class CompleteRegisterDto {
   @IsString()
   document?: string;
 
+  @ApiPropertyOptional({ example: '123456/SP-F' })
+  @IsOptional()
+  @IsString()
+  creci?: string;
+
   @ApiPropertyOptional({ example: '1990-01-01' })
   @IsOptional()
   @IsString()
@@ -183,4 +188,24 @@ export class CompleteRegisterDto {
   @IsOptional()
   @IsString()
   agencyCnpj?: string;
+
+  @ApiPropertyOptional({ example: '123456-J' })
+  @IsOptional()
+  @IsString()
+  agencyCreci?: string;
+
+  @ApiPropertyOptional({ example: 'SP' })
+  @IsOptional()
+  @IsString()
+  agencyCreciState?: string;
+
+  @ApiPropertyOptional({ example: 'João da Silva' })
+  @IsOptional()
+  @IsString()
+  representativeName?: string;
+
+  @ApiPropertyOptional({ example: '12345678900' })
+  @IsOptional()
+  @IsString()
+  representativeDocument?: string;
 }

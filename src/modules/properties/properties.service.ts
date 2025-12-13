@@ -57,6 +57,11 @@ export class PropertiesService {
               city: true,
               state: true,
               cep: true,
+              nationality: true,
+              maritalStatus: true,
+              profession: true,
+              rg: true,
+              birthDate: true,
             }
           },
           tenant: {
@@ -72,6 +77,11 @@ export class PropertiesService {
               city: true,
               state: true,
               cep: true,
+              nationality: true,
+              maritalStatus: true,
+              profession: true,
+              rg: true,
+              birthDate: true,
             }
           },
           broker: { select: { id: true, name: true, email: true, document: true } },
@@ -79,6 +89,7 @@ export class PropertiesService {
             select: {
               id: true,
               name: true,
+              tradeName: true,
               cnpj: true,
               creci: true,
               creciState: true,
@@ -88,6 +99,8 @@ export class PropertiesService {
               city: true,
               state: true,
               zipCode: true,
+              representativeName: true,
+              representativeDocument: true,
             }
           },
           images: { where: { isPrimary: true }, take: 1 },
@@ -122,6 +135,11 @@ export class PropertiesService {
             city: true,
             state: true,
             cep: true,
+            nationality: true,
+            maritalStatus: true,
+            profession: true,
+            rg: true,
+            birthDate: true,
           }
         },
         tenant: {
@@ -137,6 +155,11 @@ export class PropertiesService {
             city: true,
             state: true,
             cep: true,
+            nationality: true,
+            maritalStatus: true,
+            profession: true,
+            rg: true,
+            birthDate: true,
           }
         },
         broker: { select: { id: true, name: true, email: true, document: true } },
@@ -264,14 +287,9 @@ export class PropertiesService {
       where: { propertyId: BigInt(id) },
     });
 
-    // Soft delete the property
-    await this.prisma.property.update({
+    // Hard delete the property (permanently remove from database)
+    await this.prisma.property.delete({
       where: { id: BigInt(id) },
-      data: {
-        deleted: true,
-        deletedAt: new Date(),
-        deletedBy: BigInt(userId),
-      },
     });
 
     return { message: 'Property deleted successfully' };
@@ -337,10 +355,65 @@ export class PropertiesService {
         brokerId: brokerId ? BigInt(brokerId) : null,
       },
       include: {
-        owner: { select: { id: true, name: true, email: true } },
-        tenant: { select: { id: true, name: true, email: true } },
-        broker: { select: { id: true, name: true, email: true } },
-        agency: { select: { id: true, name: true } },
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            document: true,
+            address: true,
+            number: true,
+            neighborhood: true,
+            city: true,
+            state: true,
+            cep: true,
+            nationality: true,
+            maritalStatus: true,
+            profession: true,
+            rg: true,
+            birthDate: true,
+          }
+        },
+        tenant: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            document: true,
+            address: true,
+            number: true,
+            neighborhood: true,
+            city: true,
+            state: true,
+            cep: true,
+            nationality: true,
+            maritalStatus: true,
+            profession: true,
+            rg: true,
+            birthDate: true,
+          }
+        },
+        broker: { select: { id: true, name: true, email: true, document: true } },
+        agency: {
+          select: {
+            id: true,
+            name: true,
+            tradeName: true,
+            cnpj: true,
+            creci: true,
+            creciState: true,
+            email: true,
+            phone: true,
+            address: true,
+            city: true,
+            state: true,
+            zipCode: true,
+            representativeName: true,
+            representativeDocument: true,
+          }
+        },
       },
     });
 
@@ -372,10 +445,65 @@ export class PropertiesService {
         tenantId: data.tenantId ? BigInt(data.tenantId) : null,
       },
       include: {
-        owner: { select: { id: true, name: true, email: true } },
-        tenant: { select: { id: true, name: true, email: true } },
-        broker: { select: { id: true, name: true, email: true } },
-        agency: { select: { id: true, name: true } },
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            document: true,
+            address: true,
+            number: true,
+            neighborhood: true,
+            city: true,
+            state: true,
+            cep: true,
+            nationality: true,
+            maritalStatus: true,
+            profession: true,
+            rg: true,
+            birthDate: true,
+          }
+        },
+        tenant: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            document: true,
+            address: true,
+            number: true,
+            neighborhood: true,
+            city: true,
+            state: true,
+            cep: true,
+            nationality: true,
+            maritalStatus: true,
+            profession: true,
+            rg: true,
+            birthDate: true,
+          }
+        },
+        broker: { select: { id: true, name: true, email: true, document: true } },
+        agency: {
+          select: {
+            id: true,
+            name: true,
+            tradeName: true,
+            cnpj: true,
+            creci: true,
+            creciState: true,
+            email: true,
+            phone: true,
+            address: true,
+            city: true,
+            state: true,
+            zipCode: true,
+            representativeName: true,
+            representativeDocument: true,
+          }
+        },
       },
     });
 

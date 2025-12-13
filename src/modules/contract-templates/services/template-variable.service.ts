@@ -45,10 +45,20 @@ export class TemplateVariableService {
 
     // Owner (Locador) Variables - PF
     { key: 'NOME_LOCADOR', label: 'Nome do Locador', source: 'owner', required: true, description: 'Nome completo do proprietário' },
+    { key: 'LOCADOR_NOME', label: 'Nome do Locador', source: 'owner', required: false, description: 'Nome completo do proprietário (alias)' },
     { key: 'CPF_LOCADOR', label: 'CPF do Locador', source: 'owner', required: true, description: 'CPF do proprietário' },
+    { key: 'LOCADOR_CPF', label: 'CPF do Locador', source: 'owner', required: false, description: 'CPF do proprietário (alias)' },
     { key: 'ENDERECO_LOCADOR', label: 'Endereço do Locador', source: 'owner', required: false, description: 'Endereço completo do proprietário' },
+    { key: 'LOCADOR_ENDERECO', label: 'Endereço do Locador', source: 'owner', required: false, description: 'Endereço completo do proprietário (alias)' },
     { key: 'EMAIL_LOCADOR', label: 'E-mail do Locador', source: 'owner', required: false, description: 'E-mail do proprietário' },
+    { key: 'LOCADOR_EMAIL', label: 'E-mail do Locador', source: 'owner', required: false, description: 'E-mail do proprietário (alias)' },
     { key: 'TELEFONE_LOCADOR', label: 'Telefone do Locador', source: 'owner', required: false, description: 'Telefone do proprietário' },
+    { key: 'LOCADOR_TELEFONE', label: 'Telefone do Locador', source: 'owner', required: false, description: 'Telefone do proprietário (alias)' },
+    { key: 'LOCADOR_NACIONALIDADE', label: 'Nacionalidade do Locador', source: 'owner', required: false, description: 'Nacionalidade do proprietário' },
+    { key: 'LOCADOR_ESTADO_CIVIL', label: 'Estado Civil do Locador', source: 'owner', required: false, description: 'Estado civil do proprietário' },
+    { key: 'LOCADOR_PROFISSAO', label: 'Profissão do Locador', source: 'owner', required: false, description: 'Profissão do proprietário' },
+    { key: 'LOCADOR_RG', label: 'RG do Locador', source: 'owner', required: false, description: 'RG do proprietário' },
+    { key: 'LOCADOR_DATA_NASC', label: 'Data de Nascimento do Locador', source: 'owner', required: false, description: 'Data de nascimento do proprietário' },
 
     // Owner (Locador) Variables - PJ
     { key: 'RAZAO_SOCIAL_LOCADOR', label: 'Razão Social do Locador', source: 'owner', required: false, description: 'Razão social do proprietário PJ' },
@@ -59,10 +69,20 @@ export class TemplateVariableService {
 
     // Tenant (Locatário) Variables - PF
     { key: 'NOME_LOCATARIO', label: 'Nome do Locatário', source: 'tenant', required: true, description: 'Nome completo do inquilino' },
+    { key: 'LOCATARIO_NOME', label: 'Nome do Locatário', source: 'tenant', required: false, description: 'Nome completo do inquilino (alias)' },
     { key: 'CPF_LOCATARIO', label: 'CPF do Locatário', source: 'tenant', required: true, description: 'CPF do inquilino' },
+    { key: 'LOCATARIO_CPF', label: 'CPF do Locatário', source: 'tenant', required: false, description: 'CPF do inquilino (alias)' },
     { key: 'ENDERECO_LOCATARIO', label: 'Endereço do Locatário', source: 'tenant', required: false, description: 'Endereço atual do inquilino' },
+    { key: 'LOCATARIO_ENDERECO_ATUAL', label: 'Endereço do Locatário', source: 'tenant', required: false, description: 'Endereço atual do inquilino (alias)' },
     { key: 'EMAIL_LOCATARIO', label: 'E-mail do Locatário', source: 'tenant', required: false, description: 'E-mail do inquilino' },
+    { key: 'LOCATARIO_EMAIL', label: 'E-mail do Locatário', source: 'tenant', required: false, description: 'E-mail do inquilino (alias)' },
     { key: 'TELEFONE_LOCATARIO', label: 'Telefone do Locatário', source: 'tenant', required: false, description: 'Telefone do inquilino' },
+    { key: 'LOCATARIO_TELEFONE', label: 'Telefone do Locatário', source: 'tenant', required: false, description: 'Telefone do inquilino (alias)' },
+    { key: 'LOCATARIO_NACIONALIDADE', label: 'Nacionalidade do Locatário', source: 'tenant', required: false, description: 'Nacionalidade do inquilino' },
+    { key: 'LOCATARIO_ESTADO_CIVIL', label: 'Estado Civil do Locatário', source: 'tenant', required: false, description: 'Estado civil do inquilino' },
+    { key: 'LOCATARIO_PROFISSAO', label: 'Profissão do Locatário', source: 'tenant', required: false, description: 'Profissão do inquilino' },
+    { key: 'LOCATARIO_RG', label: 'RG do Locatário', source: 'tenant', required: false, description: 'RG do inquilino' },
+    { key: 'LOCATARIO_DATA_NASC', label: 'Data de Nascimento do Locatário', source: 'tenant', required: false, description: 'Data de nascimento do inquilino' },
 
     // Tenant (Locatário) Variables - PJ
     { key: 'RAZAO_SOCIAL_LOCATARIO', label: 'Razão Social do Locatário', source: 'tenant', required: false, description: 'Razão social do inquilino PJ' },
@@ -95,13 +115,22 @@ export class TemplateVariableService {
 
     // Agency (Imobiliária) Variables
     { key: 'RAZAO_SOCIAL_IMOBILIARIA', label: 'Razão Social da Imobiliária', source: 'agency', required: false, description: 'Razão social da imobiliária' },
+    { key: 'IMOBILIARIA_RAZAO_SOCIAL', label: 'Razão Social da Imobiliária', source: 'agency', required: false, description: 'Razão social da imobiliária (alias)' },
+    { key: 'IMOBILIARIA_NOME_FANTASIA', label: 'Nome Fantasia da Imobiliária', source: 'agency', required: false, description: 'Nome fantasia da imobiliária' },
     { key: 'CNPJ_IMOBILIARIA', label: 'CNPJ da Imobiliária', source: 'agency', required: false, description: 'CNPJ da imobiliária' },
+    { key: 'IMOBILIARIA_CNPJ', label: 'CNPJ da Imobiliária', source: 'agency', required: false, description: 'CNPJ da imobiliária (alias)' },
     { key: 'NUMERO_CRECI', label: 'CRECI da Imobiliária', source: 'agency', required: false, description: 'Número do CRECI jurídico' },
+    { key: 'IMOBILIARIA_CRECI', label: 'CRECI da Imobiliária', source: 'agency', required: false, description: 'Número do CRECI jurídico (alias)' },
     { key: 'ENDERECO_IMOBILIARIA', label: 'Endereço da Imobiliária', source: 'agency', required: false, description: 'Endereço da imobiliária' },
+    { key: 'IMOBILIARIA_ENDERECO', label: 'Endereço da Imobiliária', source: 'agency', required: false, description: 'Endereço da imobiliária (alias)' },
     { key: 'EMAIL_IMOBILIARIA', label: 'E-mail da Imobiliária', source: 'agency', required: false, description: 'E-mail da imobiliária' },
+    { key: 'IMOBILIARIA_EMAIL', label: 'E-mail da Imobiliária', source: 'agency', required: false, description: 'E-mail da imobiliária (alias)' },
     { key: 'TELEFONE_IMOBILIARIA', label: 'Telefone da Imobiliária', source: 'agency', required: false, description: 'Telefone da imobiliária' },
+    { key: 'IMOBILIARIA_TELEFONE', label: 'Telefone da Imobiliária', source: 'agency', required: false, description: 'Telefone da imobiliária (alias)' },
     { key: 'REPRESENTANTE_IMOBILIARIA', label: 'Representante da Imobiliária', source: 'agency', required: false, description: 'Nome do representante legal da imobiliária' },
+    { key: 'IMOBILIARIA_REPRESENTANTE', label: 'Representante da Imobiliária', source: 'agency', required: false, description: 'Nome do representante legal da imobiliária (alias)' },
     { key: 'CPF_REPRESENTANTE_IMOBILIARIA', label: 'CPF do Representante da Imobiliária', source: 'agency', required: false, description: 'CPF do representante legal' },
+    { key: 'IMOBILIARIA_REP_DOC', label: 'Documento do Representante da Imobiliária', source: 'agency', required: false, description: 'CPF do representante legal da imobiliária (alias)' },
 
     // System-generated Variables
     { key: 'CIDADE', label: 'Cidade', source: 'system', required: false, description: 'Cidade onde o contrato é firmado' },
@@ -249,26 +278,41 @@ export class TemplateVariableService {
 
     switch (key) {
       case 'NOME_LOCATARIO':
+      case 'LOCATARIO_NOME':
         return tenant.name || null;
       case 'CPF_LOCATARIO':
+      case 'LOCATARIO_CPF':
         return this.formatCpfCnpj(tenant.document) || null;
       case 'CNPJ_LOCATARIO':
         return this.formatCpfCnpj(tenant.cnpj || tenant.document) || null;
       case 'RAZAO_SOCIAL_LOCATARIO':
         return tenant.companyName || tenant.name || null;
       case 'ENDERECO_LOCATARIO':
+      case 'LOCATARIO_ENDERECO_ATUAL':
         const parts = [tenant.address, tenant.number, tenant.neighborhood, tenant.city, tenant.state, tenant.cep].filter(Boolean);
         return parts.join(', ') || null;
       case 'EMAIL_LOCATARIO':
+      case 'LOCATARIO_EMAIL':
         return tenant.email || null;
       case 'TELEFONE_LOCATARIO':
-        return tenant.phone || tenant.mobilePhone || null;
+      case 'LOCATARIO_TELEFONE':
+        return tenant.phone || null;
       case 'REPRESENTANTE_LOCATARIO':
         return tenant.representativeName || null;
       case 'CPF_REPRESENTANTE_LOCATARIO':
         return this.formatCpfCnpj(tenant.representativeDocument) || null;
       case 'CARGO_LOCATARIO':
         return tenant.representativePosition || null;
+      case 'LOCATARIO_NACIONALIDADE':
+        return tenant.nationality || 'Brasileira';
+      case 'LOCATARIO_ESTADO_CIVIL':
+        return tenant.maritalStatus || null;
+      case 'LOCATARIO_PROFISSAO':
+        return tenant.profession || null;
+      case 'LOCATARIO_RG':
+        return tenant.rg || null;
+      case 'LOCATARIO_DATA_NASC':
+        return tenant.birthDate ? this.formatDate(tenant.birthDate) : null;
       default:
         return null;
     }
@@ -279,26 +323,41 @@ export class TemplateVariableService {
 
     switch (key) {
       case 'NOME_LOCADOR':
+      case 'LOCADOR_NOME':
         return owner.name || null;
       case 'CPF_LOCADOR':
+      case 'LOCADOR_CPF':
         return this.formatCpfCnpj(owner.document) || null;
       case 'CNPJ_LOCADOR':
         return this.formatCpfCnpj(owner.cnpj || owner.document) || null;
       case 'RAZAO_SOCIAL_LOCADOR':
         return owner.companyName || owner.name || null;
       case 'ENDERECO_LOCADOR':
+      case 'LOCADOR_ENDERECO':
         const parts = [owner.address, owner.number, owner.neighborhood, owner.city, owner.state, owner.cep].filter(Boolean);
         return parts.join(', ') || null;
       case 'EMAIL_LOCADOR':
+      case 'LOCADOR_EMAIL':
         return owner.email || null;
       case 'TELEFONE_LOCADOR':
-        return owner.phone || owner.mobilePhone || null;
+      case 'LOCADOR_TELEFONE':
+        return owner.phone || null;
       case 'REPRESENTANTE_LOCADOR':
         return owner.representativeName || null;
       case 'CPF_REPRESENTANTE_LOCADOR':
         return this.formatCpfCnpj(owner.representativeDocument) || null;
       case 'CARGO_LOCADOR':
         return owner.representativePosition || null;
+      case 'LOCADOR_NACIONALIDADE':
+        return owner.nationality || 'Brasileira';
+      case 'LOCADOR_ESTADO_CIVIL':
+        return owner.maritalStatus || null;
+      case 'LOCADOR_PROFISSAO':
+        return owner.profession || null;
+      case 'LOCADOR_RG':
+        return owner.rg || null;
+      case 'LOCADOR_DATA_NASC':
+        return owner.birthDate ? this.formatDate(owner.birthDate) : null;
       default:
         return null;
     }
@@ -309,21 +368,31 @@ export class TemplateVariableService {
 
     switch (key) {
       case 'RAZAO_SOCIAL_IMOBILIARIA':
+      case 'IMOBILIARIA_RAZAO_SOCIAL':
         return agency.name || null;
+      case 'IMOBILIARIA_NOME_FANTASIA':
+        return agency.tradeName || agency.name || null;
       case 'CNPJ_IMOBILIARIA':
+      case 'IMOBILIARIA_CNPJ':
         return this.formatCpfCnpj(agency.cnpj) || null;
       case 'NUMERO_CRECI':
+      case 'IMOBILIARIA_CRECI':
         return agency.creci || null;
       case 'ENDERECO_IMOBILIARIA':
+      case 'IMOBILIARIA_ENDERECO':
         const parts = [agency.address, agency.number, agency.neighborhood, agency.city, agency.state, agency.cep].filter(Boolean);
         return parts.join(', ') || null;
       case 'EMAIL_IMOBILIARIA':
+      case 'IMOBILIARIA_EMAIL':
         return agency.email || null;
       case 'TELEFONE_IMOBILIARIA':
+      case 'IMOBILIARIA_TELEFONE':
         return agency.phone || null;
       case 'REPRESENTANTE_IMOBILIARIA':
+      case 'IMOBILIARIA_REPRESENTANTE':
         return agency.representativeName || null;
       case 'CPF_REPRESENTANTE_IMOBILIARIA':
+      case 'IMOBILIARIA_REP_DOC':
         return this.formatCpfCnpj(agency.representativeDocument) || null;
       default:
         return null;

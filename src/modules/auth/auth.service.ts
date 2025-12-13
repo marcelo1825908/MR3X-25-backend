@@ -120,6 +120,7 @@ export class AuthService {
         emailVerified: user.emailVerified,
         agencyId: user.agencyId?.toString(),
         agencyName: user.agency?.name,
+        creci: user.creci,
       },
     };
   }
@@ -377,6 +378,10 @@ export class AuthService {
           plan: dto.plan,
           maxProperties: limits.maxProperties,
           maxUsers: limits.maxUsers,
+          creci: dto.agencyCreci || null,
+          creciState: dto.agencyCreciState || null,
+          representativeName: dto.representativeName || null,
+          representativeDocument: dto.representativeDocument || null,
         },
       });
 
@@ -392,6 +397,7 @@ export class AuthService {
         name: dto.name,
         phone: dto.phone,
         document: dto.document,
+        creci: dto.creci,
         birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
         address: dto.address,
         cep: dto.cep,

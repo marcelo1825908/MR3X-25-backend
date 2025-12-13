@@ -6,6 +6,8 @@ export enum TokenEntityType {
   PROPERTY = 'IMO', // MR3X-IMO-YEAR-XXXX-XXXX (Imóvel)
   TENANT = 'INQ', // MR3X-INQ-YEAR-XXXX-XXXX (Inquilino)
   OWNER = 'PRO', // MR3X-PRO-YEAR-XXXX-XXXX (Proprietário)
+  BROKER = 'COR', // MR3X-COR-YEAR-XXXX-XXXX (Corretor)
+  MANAGER = 'GER', // MR3X-GER-YEAR-XXXX-XXXX (Gerente)
   DOCUMENT = 'DOC', // MR3X-DOC-YEAR-XXXX-XXXX
   INVOICE = 'INV', // MR3X-INV-YEAR-XXXX-XXXX
   AGENCY = 'AGE', // MR3X-AGE-YEAR-XXXX-XXXX (Agência)
@@ -95,6 +97,8 @@ export class TokenGeneratorService {
 
         case TokenEntityType.TENANT:
         case TokenEntityType.OWNER:
+        case TokenEntityType.BROKER:
+        case TokenEntityType.MANAGER:
           const user = await this.prisma.user.findFirst({
             where: { token },
           });
@@ -175,6 +179,8 @@ export class TokenGeneratorService {
       INQ: TokenEntityType.TENANT,
       LOC: TokenEntityType.TENANT, // Legacy support
       PRO: TokenEntityType.OWNER,
+      COR: TokenEntityType.BROKER,
+      GER: TokenEntityType.MANAGER,
       DOC: TokenEntityType.DOCUMENT,
       INV: TokenEntityType.INVOICE,
       AGE: TokenEntityType.AGENCY,

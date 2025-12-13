@@ -186,14 +186,11 @@ model User {
   userType      String?   @map("user_type") @db.VarChar(2)
 
   // Additional tenant fields
-  mobilePhone          String?  @map("mobile_phone") @db.VarChar(30)
   complement           String?  @db.VarChar(100)
   nationality          String?  @db.VarChar(50)
   maritalStatus        String?  @map("marital_status") @db.VarChar(30)
   profession           String?  @db.VarChar(100)
   employerName         String?  @map("employer_name") @db.VarChar(100)
-  monthlyIncome        String?  @map("monthly_income") @db.VarChar(50)
-  notes                String?  @db.Text
   emergencyContactName  String?  @map("emergency_contact_name") @db.VarChar(100)
   emergencyContactPhone String?  @map("emergency_contact_phone") @db.VarChar(30)
 
@@ -205,6 +202,7 @@ model User {
 
   legalRepresentativeId   BigInt?   @unique @map("legal_representative_id") @db.UnsignedBigInt
   status                  String    @default("ACTIVE") @db.VarChar(20)
+  photoUrl                String?   @map("photo_url") @db.VarChar(500)
   lastLogin               DateTime? @map("last_login") @db.Timestamp(0)
   customPermissions       String?   @map("custom_permissions") @db.Text
   notificationPreferences String?   @map("notification_preferences") @db.Text

@@ -80,9 +80,6 @@ Matrícula / Registro Imobiliário: [IMOVEL_MATRICULA]
 Descrição Complementar: [IMOVEL_DESCRICAO]
 Mobílias / Itens inclusos: [IMOVEL_MOVEIS_LISTA]
 Padrão de Energia: [IMOVEL_ENERGIA]
-Condomínio: [IMOVEL_CONDOMINIO]
-Valor Condomínio: [IMOVEL_CONDOMINIO_VALOR]
-IPTU Anual: [IMOVEL_IPTU_VALOR]
 
 ---
 
@@ -189,7 +186,7 @@ IX – MULTAS, ATRASOS E PENALIDADES
 • Multa de [MULTA_ATRASO]% sobre o aluguel em atraso.
 • Juros de [JUROS_ATRASO]% ao mês.
 • Correção monetária conforme índice do aluguel.
-• Rescisão antecipada: multa de [MULTA_RESCISAO] meses de aluguel.
+• Rescisão antecipada: multa de [VALOR_MULTA_RESCISAO].
 
 ---
 
@@ -231,28 +228,7 @@ XIII – DOCUMENTOS ANEXOS
 
 XIV – FORO
 
-Fica eleito o foro da comarca de [FORO_CIDADE_ESTADO] para dirimir conflitos deste contrato.
-
----
-
-XV – ASSINATURA DIGITAL
-
-Este documento é válido mediante assinatura eletrônica, hash, QR Code e registro de IP:
-
-HASH: [HASH_DOCUMENTO]
-IP Assinatura Locador: [IP_LOCADOR]
-IP Assinatura Locatário: [IP_LOCATARIO]
-IP Assinatura Imobiliária: [IP_IMOBILIARIA]
-
----
-
-ASSINATURAS
-
-LOCADOR: [LOCADOR_NOME] – Assinatura Digital – Data [DATA_ASS_LOCADOR]
-
-LOCATÁRIO: [LOCATARIO_NOME] – Assinatura Digital – Data [DATA_ASS_LOCATARIO]
-
-IMOBILIÁRIA: [IMOBILIARIA_RAZAO_SOCIAL] – Assinatura Digital – Data [DATA_ASS_IMOBILIARIA]`
+Fica eleito o foro da comarca de [FORO_CIDADE_ESTADO] para dirimir conflitos deste contrato.`
 };
 
 // ========================================

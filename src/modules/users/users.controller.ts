@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards, Req, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiConsumes } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { CreateUserDto, UpdateUserDto, ChangePasswordDto, CreateTenantDto, UpdateTenantDto } from './dto/user.dto';
+import { CreateUserDto, UpdateUserDto, ChangePasswordDto, CreateTenantDto, UpdateTenantDto, UpdateProfileDto } from './dto/user.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -14,6 +15,42 @@ import { UserRole } from '@prisma/client';
 @ApiBearerAuth()
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
+
+  // ===== Profile Endpoints =====
+
+  @Get('me')
+  @ApiOperation({ summary: 'Get current user profile' })
+  async getMyProfile(@CurrentUser('sub') userId: string) {
+    return this.usersService.getProfile(userId);
+  }
+
+  @Put('me')
+  @ApiOperation({ summary: 'Update current user profile' })
+  async updateMyProfile(@CurrentUser('sub') userId: string, @Body() dto: UpdateProfileDto) {
+    return this.usersService.updateProfile(userId, dto);
+  }
+
+  @Post('me/photo')
+  @ApiOperation({ summary: 'Upload profile photo' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('photo'))
+  async uploadPhoto(@CurrentUser('sub') userId: string, @UploadedFile() file: Express.Multer.File) {
+    return this.usersService.uploadProfilePhoto(userId, file);
+  }
+
+  @Delete('me/photo')
+  @ApiOperation({ summary: 'Delete profile photo' })
+  async deletePhoto(@CurrentUser('sub') userId: string) {
+    return this.usersService.deleteProfilePhoto(userId);
+  }
+
+  @Post('me/change-password')
+  @ApiOperation({ summary: 'Change current user password' })
+  async changeMyPassword(@CurrentUser('sub') userId: string, @Body() dto: ChangePasswordDto) {
+    return this.usersService.changePassword(userId, dto.currentPassword, dto.newPassword);
+  }
+
+  // ===== User Management Endpoints =====
 
   @Get()
   @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.AGENCY_ADMIN, UserRole.AGENCY_MANAGER, UserRole.PROPRIETARIO, UserRole.INDEPENDENT_OWNER, UserRole.BROKER)
