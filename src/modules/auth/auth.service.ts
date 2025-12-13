@@ -85,6 +85,13 @@ export class AuthService {
       throw new UnauthorizedException('Account is inactive');
     }
 
+    // Check if user is frozen due to plan limits
+    if (user.isFrozen) {
+      throw new UnauthorizedException(
+        'FROZEN_USER:' + (user.frozenReason || 'Sua conta está congelada devido ao limite do plano. Entre em contato com o administrador da agência.')
+      );
+    }
+
     await this.prisma.user.update({
       where: { id: user.id },
       data: { lastLogin: new Date() },

@@ -105,8 +105,9 @@ export class UsersService {
     plan?: string;
     createdById?: string;
     excludeUserId?: string;
+    excludeFrozen?: boolean;
   }) {
-    const { skip = 0, take = 10, search, role, agencyId, status, plan, createdById, excludeUserId } = params;
+    const { skip = 0, take = 10, search, role, agencyId, status, plan, createdById, excludeUserId, excludeFrozen } = params;
 
     const where: any = {};
     if (role) where.role = role;

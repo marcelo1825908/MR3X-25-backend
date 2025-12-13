@@ -63,6 +63,7 @@ export class UsersController {
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'plan', required: false })
   @ApiQuery({ name: 'excludeCurrentUser', required: false })
+  @ApiQuery({ name: 'excludeFrozen', required: false, description: 'Exclude frozen users from results' })
   async findAll(
     @Query('skip') skip?: number,
     @Query('take') take?: number,
@@ -72,6 +73,7 @@ export class UsersController {
     @Query('status') status?: string,
     @Query('plan') plan?: string,
     @Query('excludeCurrentUser') excludeCurrentUser?: string,
+    @Query('excludeFrozen') excludeFrozen?: string,
     @CurrentUser() user?: any,
   ) {
     // CEO sees all users
@@ -107,7 +109,10 @@ export class UsersController {
     // Exclude current user from results if requested
     const excludeUserId = excludeCurrentUser === 'true' ? user.sub : undefined;
 
-    return this.usersService.findAll({ skip, take, search, role, agencyId: finalAgencyId, status, plan, createdById, excludeUserId });
+    // Exclude frozen users from results if requested (for dropdowns)
+    const shouldExcludeFrozen = excludeFrozen === 'true';
+
+    return this.usersService.findAll({ skip, take, search, role, agencyId: finalAgencyId, status, plan, createdById, excludeUserId, excludeFrozen: shouldExcludeFrozen });
   }
 
   @Get('details')
