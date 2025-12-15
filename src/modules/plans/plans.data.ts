@@ -28,6 +28,12 @@ export interface PlanConfig {
   screeningPrice: number;
   apiAddOnPrice: number | null;
 
+  // Free usage limits per billing period (charges apply after exceeding)
+  freeInspections: number;
+  freeSearches: number;
+  freeSettlements: number;
+  freeApiCalls: number;
+
   supportTier: 'EMAIL' | 'PRIORITY' | '24X7';
 
   features: string[];
@@ -99,15 +105,24 @@ export const PLANS_CONFIG: Record<string, PlanConfig> = {
     screeningPrice: 8.90,
     apiAddOnPrice: null,
 
+    // Free usage limits
+    freeInspections: 2,
+    freeSearches: 5,
+    freeSettlements: 1,
+    freeApiCalls: 0,
+
     supportTier: 'EMAIL',
 
     features: [
       '1 contrato ativo',
       '2 usuários',
+      '2 vistorias gratuitas/mês',
+      '5 análises gratuitas/mês',
+      '1 acordo gratuito/mês',
       'Contratos extras: R$ 4,90/cada',
-      'Vistorias: R$ 3,90/cada',
-      'Acordos: R$ 6,90/cada',
-      'Análise de inquilino: R$ 8,90',
+      'Vistorias extras: R$ 3,90/cada',
+      'Acordos extras: R$ 6,90/cada',
+      'Análise extra: R$ 8,90/cada',
       'Suporte por email',
     ],
     isPopular: false,
@@ -144,15 +159,23 @@ export const PLANS_CONFIG: Record<string, PlanConfig> = {
     screeningPrice: 6.90,
     apiAddOnPrice: null,
 
+    // Free usage limits (inspections unlimited)
+    freeInspections: -1, // unlimited
+    freeSearches: 10,
+    freeSettlements: 5,
+    freeApiCalls: 0,
+
     supportTier: 'PRIORITY',
 
     features: [
       '20 contratos ativos',
       '5 usuários',
       'Vistorias ilimitadas',
+      '10 análises gratuitas/mês',
+      '5 acordos gratuitos/mês',
       'Contratos extras: R$ 2,90/cada',
-      'Acordos: R$ 4,90/cada',
-      'Análise de inquilino: R$ 6,90',
+      'Acordos extras: R$ 4,90/cada',
+      'Análise extra: R$ 6,90/cada',
       'Relatórios avançados',
       'Suporte prioritário',
     ],
@@ -190,15 +213,22 @@ export const PLANS_CONFIG: Record<string, PlanConfig> = {
     screeningPrice: 4.90,
     apiAddOnPrice: 29.00,
 
+    // Free usage limits (inspections and settlements unlimited)
+    freeInspections: -1, // unlimited
+    freeSearches: 20,
+    freeSettlements: -1, // unlimited
+    freeApiCalls: 100,
+
     supportTier: 'PRIORITY',
 
     features: [
       '60 contratos ativos',
       '10 usuários',
-      'Todos os recursos liberados',
       'Vistorias ilimitadas',
       'Acordos ilimitados',
-      'Análise de inquilino: R$ 4,90',
+      '20 análises gratuitas/mês',
+      '100 chamadas API gratuitas/mês',
+      'Análise extra: R$ 4,90/cada',
       'API opcional: +R$ 29/mês',
       'Automações',
       'Relatórios avançados',
@@ -237,14 +267,23 @@ export const PLANS_CONFIG: Record<string, PlanConfig> = {
     screeningPrice: 3.90,
     apiAddOnPrice: null,
 
+    // Free usage limits (all unlimited except searches)
+    freeInspections: -1, // unlimited
+    freeSearches: 50,
+    freeSettlements: -1, // unlimited
+    freeApiCalls: -1, // unlimited
+
     supportTier: '24X7',
 
     features: [
       '200 contratos ativos',
       'Usuários ilimitados',
+      'Vistorias ilimitadas',
+      'Acordos ilimitados',
+      '50 análises gratuitas/mês',
+      'API ilimitada incluída',
+      'Análise extra: R$ 3,90/cada',
       'R$ 0,90/contrato excedente',
-      'API + automações incluídos',
-      'Análise de inquilino: R$ 3,90',
       'Integrações avançadas',
       'White-label',
       'Analytics avançado',
@@ -255,6 +294,13 @@ export const PLANS_CONFIG: Record<string, PlanConfig> = {
   },
 };
 
+export interface FreeUsageLimits {
+  freeInspections: number;
+  freeSearches: number;
+  freeSettlements: number;
+  freeApiCalls: number;
+}
+
 export function getMicrotransactionPricing(planName: string): MicrotransactionPricing {
   const plan = PLANS_CONFIG[planName] || PLANS_CONFIG.FREE;
 
@@ -264,6 +310,38 @@ export function getMicrotransactionPricing(planName: string): MicrotransactionPr
     settlement: plan.settlementPrice,
     screening: plan.screeningPrice,
   };
+}
+
+export function getFreeUsageLimits(planName: string): FreeUsageLimits {
+  const plan = PLANS_CONFIG[planName] || PLANS_CONFIG.FREE;
+
+  return {
+    freeInspections: plan.freeInspections,
+    freeSearches: plan.freeSearches,
+    freeSettlements: plan.freeSettlements,
+    freeApiCalls: plan.freeApiCalls,
+  };
+}
+
+export function isWithinFreeLimit(
+  planName: string,
+  feature: 'inspections' | 'searches' | 'settlements' | 'apiCalls',
+  currentUsage: number
+): boolean {
+  const limits = getFreeUsageLimits(planName);
+
+  switch (feature) {
+    case 'inspections':
+      return limits.freeInspections === -1 || currentUsage < limits.freeInspections;
+    case 'searches':
+      return limits.freeSearches === -1 || currentUsage < limits.freeSearches;
+    case 'settlements':
+      return limits.freeSettlements === -1 || currentUsage < limits.freeSettlements;
+    case 'apiCalls':
+      return limits.freeApiCalls === -1 || currentUsage < limits.freeApiCalls;
+    default:
+      return false;
+  }
 }
 
 export function getPlanLimits(planName: string, entityType: EntityType = 'agency'): PlanLimits {

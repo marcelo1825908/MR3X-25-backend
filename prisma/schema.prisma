@@ -1672,6 +1672,12 @@ model SubscriptionPlan {
   screeningPrice     Decimal  @map("screening_price") @db.Decimal(10, 2)
   apiAddOnPrice      Decimal? @map("api_addon_price") @db.Decimal(10, 2)
 
+  // Free usage limits per billing period (charges apply after exceeding)
+  freeInspections  Int @default(0) @map("free_inspections")
+  freeSearches     Int @default(0) @map("free_searches")
+  freeSettlements  Int @default(0) @map("free_settlements")
+  freeApiCalls     Int @default(0) @map("free_api_calls")
+
   supportTier String @default("EMAIL") @map("support_tier") @db.VarChar(30)
 
   displayOrder Int     @default(0) @map("display_order")

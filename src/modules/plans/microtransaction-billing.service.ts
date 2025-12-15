@@ -5,6 +5,8 @@ import {
   PLANS_CONFIG,
   getMicrotransactionPricing,
   getPlanByName,
+  getFreeUsageLimits,
+  isWithinFreeLimit,
   MicrotransactionPricing,
 } from './plans.data';
 
@@ -31,9 +33,10 @@ export interface UsageSummary {
   plan: string;
   billingMonth: string;
   extraContracts: { count: number; totalAmount: number };
-  inspections: { count: number; totalAmount: number; included: boolean };
-  settlements: { count: number; totalAmount: number; included: boolean };
-  screenings: { count: number; totalAmount: number };
+  inspections: { count: number; totalAmount: number; included: boolean; freeUsed: number; freeLimit: number };
+  settlements: { count: number; totalAmount: number; included: boolean; freeUsed: number; freeLimit: number };
+  screenings: { count: number; totalAmount: number; freeUsed: number; freeLimit: number };
+  apiCalls: { count: number; totalAmount: number; freeUsed: number; freeLimit: number };
   totalPending: number;
   totalPaid: number;
 }
@@ -68,7 +71,13 @@ export class MicrotransactionBillingService {
   async isFeatureIncluded(agencyId: string, type: MicrotransactionType): Promise<boolean> {
     const agency = await this.prisma.agency.findUnique({
       where: { id: BigInt(agencyId) },
-      select: { plan: true },
+      select: {
+        plan: true,
+        monthlyInspectionsUsed: true,
+        monthlySettlementsUsed: true,
+        monthlyScreeningsUsed: true,
+        monthlyApiCallsUsed: true,
+      },
     });
 
     const planName = agency?.plan || 'FREE';
@@ -78,9 +87,21 @@ export class MicrotransactionBillingService {
 
     switch (type) {
       case MicrotransactionType.INSPECTION:
-        return planConfig.unlimitedInspections;
+        // Check if unlimited first
+        if (planConfig.unlimitedInspections) return true;
+        // Check if within free limit
+        return isWithinFreeLimit(planName, 'inspections', agency?.monthlyInspectionsUsed || 0);
       case MicrotransactionType.SETTLEMENT:
-        return planConfig.unlimitedSettlements;
+        // Check if unlimited first
+        if (planConfig.unlimitedSettlements) return true;
+        // Check if within free limit
+        return isWithinFreeLimit(planName, 'settlements', agency?.monthlySettlementsUsed || 0);
+      case MicrotransactionType.SCREENING:
+        // Screenings are always pay-per-use but can have free quota
+        return isWithinFreeLimit(planName, 'searches', agency?.monthlyScreeningsUsed || 0);
+      case MicrotransactionType.API_CALL:
+        // Check if within free API call limit
+        return isWithinFreeLimit(planName, 'apiCalls', agency?.monthlyApiCallsUsed || 0);
       default:
         return false;
     }
@@ -284,6 +305,7 @@ export class MicrotransactionBillingService {
         monthlyInspectionsUsed: true,
         monthlySettlementsUsed: true,
         monthlyScreeningsUsed: true,
+        monthlyApiCallsUsed: true,
       },
     });
 
@@ -291,7 +313,9 @@ export class MicrotransactionBillingService {
       throw new NotFoundException('Agency not found');
     }
 
-    const planConfig = getPlanByName(agency.plan || 'FREE');
+    const planName = agency.plan || 'FREE';
+    const planConfig = getPlanByName(planName);
+    const freeLimits = getFreeUsageLimits(planName);
     const now = new Date();
     const targetMonth = billingMonth || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
@@ -316,17 +340,17 @@ export class MicrotransactionBillingService {
       },
     });
 
-
     const extraContracts = microtransactions.filter(m => m.type === MicrotransactionType.EXTRA_CONTRACT);
     const inspections = microtransactions.filter(m => m.type === MicrotransactionType.INSPECTION);
     const settlements = microtransactions.filter(m => m.type === MicrotransactionType.SETTLEMENT);
     const screenings = microtransactions.filter(m => m.type === MicrotransactionType.SCREENING);
+    const apiCalls = microtransactions.filter(m => m.type === MicrotransactionType.API_CALL);
 
     const pendingTransactions = microtransactions.filter(m => m.status === MicrotransactionStatus.PENDING);
     const paidTransactions = microtransactions.filter(m => m.status === MicrotransactionStatus.PAID);
 
     return {
-      plan: agency.plan || 'FREE',
+      plan: planName,
       billingMonth: targetMonth,
       extraContracts: {
         count: extraContracts.length,
@@ -336,15 +360,27 @@ export class MicrotransactionBillingService {
         count: inspections.length,
         totalAmount: inspections.reduce((sum, m) => sum + Number(m.amount), 0),
         included: planConfig?.unlimitedInspections || false,
+        freeUsed: agency.monthlyInspectionsUsed || 0,
+        freeLimit: freeLimits.freeInspections,
       },
       settlements: {
         count: settlements.length,
         totalAmount: settlements.reduce((sum, m) => sum + Number(m.amount), 0),
         included: planConfig?.unlimitedSettlements || false,
+        freeUsed: agency.monthlySettlementsUsed || 0,
+        freeLimit: freeLimits.freeSettlements,
       },
       screenings: {
         count: screenings.length,
         totalAmount: screenings.reduce((sum, m) => sum + Number(m.amount), 0),
+        freeUsed: agency.monthlyScreeningsUsed || 0,
+        freeLimit: freeLimits.freeSearches,
+      },
+      apiCalls: {
+        count: apiCalls.length,
+        totalAmount: apiCalls.reduce((sum, m) => sum + Number(m.amount), 0),
+        freeUsed: agency.monthlyApiCallsUsed || 0,
+        freeLimit: freeLimits.freeApiCalls,
       },
       totalPending: pendingTransactions.reduce((sum, m) => sum + Number(m.amount), 0),
       totalPaid: paidTransactions.reduce((sum, m) => sum + Number(m.amount), 0),

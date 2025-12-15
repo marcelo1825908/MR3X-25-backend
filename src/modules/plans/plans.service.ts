@@ -146,13 +146,22 @@ export class PlansService {
     });
 
     const plans = this.getPlansWithUpdates();
-    return plans.map(plan => ({
-      ...plan,
-      subscribers: planCounts.get(plan.name) || 0,
-      features: Array.isArray(plan.features) ? plan.features : [],
-      createdAt: plan.createdAt.toISOString(),
-      updatedAt: plan.updatedAt.toISOString(),
-    }));
+    return plans.map(plan => {
+      // Get the full config to access free usage limits
+      const planConfig = PLANS_CONFIG[plan.name];
+      return {
+        ...plan,
+        subscribers: planCounts.get(plan.name) || 0,
+        features: Array.isArray(plan.features) ? plan.features : [],
+        createdAt: plan.createdAt.toISOString(),
+        updatedAt: plan.updatedAt.toISOString(),
+        // Include free usage limits
+        freeInspections: planConfig?.freeInspections ?? 0,
+        freeSearches: planConfig?.freeSearches ?? 0,
+        freeSettlements: planConfig?.freeSettlements ?? 0,
+        freeApiCalls: planConfig?.freeApiCalls ?? 0,
+      };
+    });
   }
 
   async getPlanById(id: string) {

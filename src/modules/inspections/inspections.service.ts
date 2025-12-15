@@ -67,13 +67,22 @@ export class InspectionsService {
     if (inspectorId) where.inspectorId = BigInt(inspectorId);
     if (createdById) where.createdBy = BigInt(createdById);
 
-    // Role-based filtering: only show inspections for properties the user is responsible for
+    // Role-based filtering: only show inspections for properties/contracts the user is responsible for
+    let roleFilter: any = null;
     if (userRole === 'INQUILINO' && userId) {
+      // Tenant only sees inspections that have been sent AND where they are the tenant
       where.sentAt = { not: null };
-      where.property = { tenantId: BigInt(userId) };
+      roleFilter = [
+        { contract: { tenantId: BigInt(userId) } },
+        { property: { tenantId: BigInt(userId) } },
+      ];
     } else if (userRole === 'PROPRIETARIO' && userId) {
+      // Owner only sees inspections that have been sent AND where they are the owner
       where.sentAt = { not: null };
-      where.property = { ownerId: BigInt(userId) };
+      roleFilter = [
+        { contract: { ownerId: BigInt(userId) } },
+        { property: { ownerId: BigInt(userId) } },
+      ];
     } else if (userRole === 'BROKER' && userId) {
       // Brokers only see inspections for properties they are assigned to
       where.property = { brokerId: BigInt(userId) };
@@ -85,13 +94,26 @@ export class InspectionsService {
       if (endDate) where.date.lte = new Date(endDate);
     }
 
+    // Build final AND conditions
+    const andConditions: any[] = [];
+
+    if (roleFilter) {
+      andConditions.push({ OR: roleFilter });
+    }
+
     if (search && search.trim()) {
-      where.OR = [
-        { property: { name: { contains: search.trim() } } },
-        { property: { address: { contains: search.trim() } } },
-        { inspector: { name: { contains: search.trim() } } },
-        { notes: { contains: search.trim() } },
-      ];
+      andConditions.push({
+        OR: [
+          { property: { name: { contains: search.trim() } } },
+          { property: { address: { contains: search.trim() } } },
+          { inspector: { name: { contains: search.trim() } } },
+          { notes: { contains: search.trim() } },
+        ],
+      });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
     }
 
     const [inspections, total] = await Promise.all([
