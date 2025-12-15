@@ -71,12 +71,20 @@ export class InspectionsController {
   ) {
     let createdById: string | undefined;
     let effectiveAgencyId: string | undefined = agencyId;
+    let userRole: string | undefined = user?.role;
+    let userId: string | undefined = user?.sub;
 
     if (user?.role === 'CEO') {
+      // CEO sees all
     } else if (user?.role === 'ADMIN') {
       createdById = user.sub;
     } else if (user?.role === 'INDEPENDENT_OWNER') {
       createdById = user.sub;
+    } else if (user?.role === 'INQUILINO' || user?.role === 'PROPRIETARIO' || user?.role === 'BROKER') {
+      // Tenant, Owner, Broker - filtered by property relationship in service
+    } else if (user?.role === 'AGENCY_ADMIN' || user?.role === 'AGENCY_MANAGER') {
+      // Agency admins/managers see all inspections for their agency
+      effectiveAgencyId = user.agencyId;
     } else if (user?.agencyId) {
       effectiveAgencyId = user.agencyId;
     } else {
@@ -96,6 +104,8 @@ export class InspectionsController {
       startDate,
       endDate,
       search,
+      userRole,
+      userId,
     });
   }
 
@@ -234,6 +244,16 @@ export class InspectionsController {
     @Body('status') status: InspectionStatus,
   ) {
     return this.inspectionsService.updateStatus(id, status);
+  }
+
+  @Patch(':id/send')
+  @ApiOperation({ summary: 'Send inspection to tenant/owner - makes it visible to them' })
+  @OwnerPermission('inspections', OwnerAction.EDIT)
+  async sendInspection(
+    @Param('id') id: string,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.inspectionsService.sendInspection(id, userId);
   }
 
   @Delete(':id')

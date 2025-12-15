@@ -240,6 +240,7 @@ model User {
 
   inspectionsAsInspector Inspection[]      @relation("InspectionInspector")
   inspectionsAssigned    Inspection[]      @relation("InspectionAssignedBy")
+  inspectionsSent        Inspection[]      @relation("InspectionSentBy")
   inspectionsApproved    Inspection[]      @relation("InspectionApprovedBy")
   inspectionsCreated     Inspection[]      @relation("InspectionCreatedBy")
   inspectionMediaUploads InspectionMedia[] @relation("InspectionMediaUploadedBy")
@@ -880,6 +881,8 @@ model Inspection {
   userAgent String? @map("user_agent") @db.VarChar(500)
 
   status          String    @default("RASCUNHO") @db.VarChar(20)
+  sentAt          DateTime? @map("sent_at") @db.Timestamp(0)
+  sentById        BigInt?   @map("sent_by_id") @db.UnsignedBigInt
   approvedById    BigInt?   @map("approved_by_id") @db.UnsignedBigInt
   approvedAt      DateTime? @map("approved_at") @db.Timestamp(0)
   rejectionReason String?   @map("rejection_reason") @db.Text
@@ -894,6 +897,7 @@ model Inspection {
   property                   Property                    @relation(fields: [propertyId], references: [id])
   inspector                  User                        @relation("InspectionInspector", fields: [inspectorId], references: [id])
   assignedBy                 User?                       @relation("InspectionAssignedBy", fields: [assignedById], references: [id])
+  sentBy                     User?                       @relation("InspectionSentBy", fields: [sentById], references: [id])
   approvedBy                 User?                       @relation("InspectionApprovedBy", fields: [approvedById], references: [id])
   createdByUser              User?                       @relation("InspectionCreatedBy", fields: [createdBy], references: [id])
   template                   InspectionTemplate?         @relation(fields: [templateId], references: [id])

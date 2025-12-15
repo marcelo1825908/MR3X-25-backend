@@ -30,8 +30,8 @@ export class ContractsService {
     private validationService: ContractValidationService,
   ) {}
 
-  async findAll(params: { skip?: number; take?: number; agencyId?: string; status?: string; createdById?: string; userId?: string; search?: string }) {
-    const { skip = 0, take = 10, agencyId, status, createdById, userId, search } = params;
+  async findAll(params: { skip?: number; take?: number; agencyId?: string; status?: string; createdById?: string; userId?: string; userRole?: string; search?: string }) {
+    const { skip = 0, take = 10, agencyId, status, createdById, userId, userRole, search } = params;
 
     if (agencyId) {
       try {
@@ -44,7 +44,20 @@ export class ContractsService {
     const where: any = { deleted: false };
     if (status) where.status = status;
 
-    if (agencyId) {
+    // Role-based filtering: only show contracts for properties the user is responsible for
+    if (userRole === 'INQUILINO' && userId) {
+      // Tenant only sees contracts where they are the tenant
+      where.tenantId = BigInt(userId);
+    } else if (userRole === 'PROPRIETARIO' && userId) {
+      // Owner only sees contracts where they are the owner (contract owner or property owner)
+      where.OR = [
+        { ownerId: BigInt(userId) },
+        { property: { ownerId: BigInt(userId) } },
+      ];
+    } else if (userRole === 'BROKER' && userId) {
+      // Broker only sees contracts for properties they are assigned to
+      where.property = { brokerId: BigInt(userId) };
+    } else if (agencyId) {
       where.agencyId = BigInt(agencyId);
     } else if (createdById) {
       where.property = { createdBy: BigInt(createdById) };

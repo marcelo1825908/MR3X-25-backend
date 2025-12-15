@@ -37,6 +37,8 @@ export class InspectionsService {
     startDate?: string;
     endDate?: string;
     search?: string;
+    userRole?: string;
+    userId?: string;
   }) {
     const {
       skip = 0,
@@ -51,6 +53,8 @@ export class InspectionsService {
       startDate,
       endDate,
       search,
+      userRole,
+      userId,
     } = params;
 
     const where: any = {};
@@ -62,6 +66,18 @@ export class InspectionsService {
     if (status) where.status = status;
     if (inspectorId) where.inspectorId = BigInt(inspectorId);
     if (createdById) where.createdBy = BigInt(createdById);
+
+    // Role-based filtering: only show inspections for properties the user is responsible for
+    if (userRole === 'INQUILINO' && userId) {
+      where.sentAt = { not: null };
+      where.property = { tenantId: BigInt(userId) };
+    } else if (userRole === 'PROPRIETARIO' && userId) {
+      where.sentAt = { not: null };
+      where.property = { ownerId: BigInt(userId) };
+    } else if (userRole === 'BROKER' && userId) {
+      // Brokers only see inspections for properties they are assigned to
+      where.property = { brokerId: BigInt(userId) };
+    }
 
     if (startDate || endDate) {
       where.date = {};
@@ -439,6 +455,31 @@ export class InspectionsService {
     return this.findOne(id);
   }
 
+  async sendInspection(id: string, userId: string) {
+    const inspection = await this.prisma.inspection.findUnique({
+      where: { id: BigInt(id) },
+    });
+
+    if (!inspection) {
+      throw new NotFoundException('Inspection not found');
+    }
+
+    if (inspection.sentAt) {
+      throw new BadRequestException('Inspection has already been sent');
+    }
+
+    await this.prisma.inspection.update({
+      where: { id: BigInt(id) },
+      data: {
+        sentAt: new Date(),
+        sentById: BigInt(userId),
+        status: inspection.status === 'RASCUNHO' ? 'EM_ANDAMENTO' : inspection.status,
+      },
+    });
+
+    return this.findOne(id);
+  }
+
   async findAllTemplates(params: { agencyId?: string; type?: string; isDefault?: boolean }) {
     const { agencyId, type, isDefault } = params;
 
@@ -563,6 +604,8 @@ export class InspectionsService {
       createdBy: inspection.createdBy?.toString() || null,
       date: inspection.date?.toISOString() || null,
       scheduledDate: inspection.scheduledDate?.toISOString() || null,
+      sentAt: inspection.sentAt?.toISOString() || null,
+      sentById: inspection.sentById?.toString() || null,
       tenantSignedAt: inspection.tenantSignedAt?.toISOString() || null,
       ownerSignedAt: inspection.ownerSignedAt?.toISOString() || null,
       agencySignedAt: inspection.agencySignedAt?.toISOString() || null,
