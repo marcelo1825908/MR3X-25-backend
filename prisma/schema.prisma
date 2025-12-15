@@ -66,11 +66,9 @@ model Agency {
   email         String   @db.VarChar(191)
   phone         String?  @db.VarChar(30)
 
-  // Legal Representative (Representante Legal)
   representativeName     String?  @map("representative_name") @db.VarChar(255)
   representativeDocument String?  @map("representative_document") @db.VarChar(20) // CPF do representante
 
-  // CRECI - Conselho Regional de Corretores de Imóveis (Required for real estate agencies)
   creci         String?  @db.VarChar(30)
   creciState    String?  @map("creci_state") @db.VarChar(2)
 
@@ -96,7 +94,6 @@ model Agency {
   activePropertiesCount Int @default(0) @map("active_properties_count")
   activeUsersCount      Int @default(0) @map("active_users_count")
 
-  // Subscription Management
   subscriptionId     String?   @map("subscription_id") @db.VarChar(100)
   subscriptionStatus String?   @default("ACTIVE") @map("subscription_status") @db.VarChar(30)
   currentPeriodStart DateTime? @map("current_period_start") @db.Date
@@ -105,26 +102,22 @@ model Agency {
   trialEndsAt        DateTime? @map("trial_ends_at") @db.Timestamp(0)
   canceledAt         DateTime? @map("canceled_at") @db.Timestamp(0)
 
-  // Payment Tracking
   lastPaymentAt     DateTime? @map("last_payment_at") @db.Timestamp(0)
   lastPaymentAmount Decimal?  @map("last_payment_amount") @db.Decimal(10, 2)
   totalSpent        Decimal   @default(0) @map("total_spent") @db.Decimal(12, 2)
 
-  // API Add-on Subscription (Optional for PROFESSIONAL plan)
   apiAddOnEnabled      Boolean   @default(false) @map("api_addon_enabled")
   apiAddOnPrice        Decimal?  @default(29.00) @map("api_addon_price") @db.Decimal(10, 2)
   apiAddOnSubscription String?   @map("api_addon_subscription") @db.VarChar(100)
   apiAddOnStartDate    DateTime? @map("api_addon_start_date") @db.Date
   apiAddOnEndDate      DateTime? @map("api_addon_end_date") @db.Date
 
-  // Monthly Usage Tracking (for microtransactions)
   monthlyInspectionsUsed Int       @default(0) @map("monthly_inspections_used")
   monthlySettlementsUsed Int       @default(0) @map("monthly_settlements_used")
   monthlyScreeningsUsed  Int       @default(0) @map("monthly_screenings_used")
   monthlyApiCallsUsed    Int       @default(0) @map("monthly_api_calls_used")
   usageResetDate         DateTime? @map("usage_reset_date") @db.Date
 
-  // Support Tier
   supportTier String @default("EMAIL") @map("support_tier") @db.VarChar(20)
 
   defaultEarlyTerminationPenaltyPercent Decimal? @default(3.0) @map("default_early_termination_penalty_percent") @db.Decimal(5, 2)
@@ -139,7 +132,6 @@ model Agency {
   apiEnabled Boolean @default(false) @map("api_enabled")
   apiKey     String? @map("api_key") @db.VarChar(255)
 
-  // Extrajudicial Notification Settings
   extrajudicialEnabled           Boolean @default(true) @map("extrajudicial_enabled")
   extrajudicialDaysBeforeNotice  Int     @default(30) @map("extrajudicial_days_before_notice") // Days of delinquency before auto-generating notification
   extrajudicialLegalDeadlineDays Int     @default(15) @map("extrajudicial_legal_deadline_days") // Legal deadline for tenant to pay
@@ -184,7 +176,6 @@ model User {
   state         String?   @db.VarChar(10)
   userType      String?   @map("user_type") @db.VarChar(2)
 
-  // Additional tenant fields
   complement           String?  @db.VarChar(100)
   nationality          String?  @db.VarChar(50)
   maritalStatus        String?  @map("marital_status") @db.VarChar(30)
@@ -193,7 +184,11 @@ model User {
   emergencyContactName  String?  @map("emergency_contact_name") @db.VarChar(100)
   emergencyContactPhone String?  @map("emergency_contact_phone") @db.VarChar(30)
 
-  // CRECI (Conselho Regional de Corretores de Imóveis) for brokers/inspectors
+  bankName    String?  @map("bank_name") @db.VarChar(100)
+  bankBranch  String?  @map("bank_branch") @db.VarChar(20)
+  bankAccount String?  @map("bank_account") @db.VarChar(30)
+  pixKey      String?  @map("pix_key") @db.VarChar(100)
+
   creci           String?   @db.VarChar(30)
   creciState      String?   @map("creci_state") @db.VarChar(2)
   creciValidUntil DateTime? @map("creci_valid_until") @db.Date
@@ -249,7 +244,6 @@ model User {
   inspectionsCreated     Inspection[]      @relation("InspectionCreatedBy")
   inspectionMediaUploads InspectionMedia[] @relation("InspectionMediaUploadedBy")
 
-  // ExtrajudicialNotification relations
   extrajudicialAsCreditor ExtrajudicialNotification[] @relation("ExtrajudicialCreditor")
   extrajudicialAsDebtor   ExtrajudicialNotification[] @relation("ExtrajudicialDebtor")
   extrajudicialCreated    ExtrajudicialNotification[] @relation("ExtrajudicialCreatedBy")
@@ -367,7 +361,6 @@ model Property {
   previousStatus String?   @map("previous_status") @db.VarChar(50)
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
 
-  // Additional property details for contracts
   registrationNumber String?   @map("registration_number") @db.VarChar(100)
   builtArea          Decimal?  @map("built_area") @db.Decimal(10, 2)
   totalArea          Decimal?  @map("total_area") @db.Decimal(10, 2)
@@ -479,7 +472,6 @@ model Contract {
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
   updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
 
-  // Contract Freezing for Plan Limits
   isFrozen       Boolean   @default(false) @map("is_frozen")
   frozenAt       DateTime? @map("frozen_at") @db.Timestamp(0)
   frozenReason   String?   @map("frozen_reason") @db.VarChar(255)
@@ -817,12 +809,10 @@ model Inspection {
   inspectorId   BigInt    @map("inspector_id") @db.UnsignedBigInt
   assignedById  BigInt?   @map("assigned_by_id") @db.UnsignedBigInt
 
-  // Content fields
   rooms  String? @db.Text
   photos String? @db.Text
   notes  String? @db.Text
 
-  // Tenant signature with full security data
   tenantSignature   String?   @map("tenant_signature") @db.Text
   tenantSignedAt    DateTime? @map("tenant_signed_at") @db.Timestamp(0)
   tenantSignedIP    String?   @map("tenant_signed_ip") @db.VarChar(45)
@@ -831,7 +821,6 @@ model Inspection {
   tenantGeoLng      Float?    @map("tenant_geo_lng")
   tenantGeoConsent  Boolean   @default(false) @map("tenant_geo_consent")
 
-  // Owner signature with full security data
   ownerSignature   String?   @map("owner_signature") @db.Text
   ownerSignedAt    DateTime? @map("owner_signed_at") @db.Timestamp(0)
   ownerSignedIP    String?   @map("owner_signed_ip") @db.VarChar(45)
@@ -840,7 +829,6 @@ model Inspection {
   ownerGeoLng      Float?    @map("owner_geo_lng")
   ownerGeoConsent  Boolean   @default(false) @map("owner_geo_consent")
 
-  // Agency signature with full security data
   agencySignature   String?   @map("agency_signature") @db.Text
   agencySignedAt    DateTime? @map("agency_signed_at") @db.Timestamp(0)
   agencySignedIP    String?   @map("agency_signed_ip") @db.VarChar(45)
@@ -849,7 +837,6 @@ model Inspection {
   agencyGeoLng      Float?    @map("agency_geo_lng")
   agencyGeoConsent  Boolean   @default(false) @map("agency_geo_consent")
 
-  // Inspector signature with full security data
   inspectorSignature   String?   @map("inspector_signature") @db.Text
   inspectorSignedAt    DateTime? @map("inspector_signed_at") @db.Timestamp(0)
   inspectorSignedIP    String?   @map("inspector_signed_ip") @db.VarChar(45)
@@ -858,16 +845,13 @@ model Inspection {
   inspectorGeoLng      Float?    @map("inspector_geo_lng")
   inspectorGeoConsent  Boolean   @default(false) @map("inspector_geo_consent")
 
-  // Inspector CRECI info captured at signing time (snapshot for legal validity)
   inspectorCreci      String? @map("inspector_creci") @db.VarChar(30)
   inspectorCreciState String? @map("inspector_creci_state") @db.VarChar(2)
 
-  // Legal Responsibility Declaration
   legalDeclarationAccepted   Boolean   @default(false) @map("legal_declaration_accepted")
   legalDeclarationAcceptedAt DateTime? @map("legal_declaration_accepted_at") @db.Timestamp(0)
   legalDeclarationText       String?   @map("legal_declaration_text") @db.Text
 
-  // Witness signatures (optional, for added legal weight)
   witness1Signature String?   @map("witness1_signature") @db.Text
   witness1Name      String?   @map("witness1_name") @db.VarChar(255)
   witness1Document  String?   @map("witness1_document") @db.VarChar(30)
@@ -880,7 +864,6 @@ model Inspection {
   witness2SignedAt  DateTime? @map("witness2_signed_at") @db.Timestamp(0)
   witness2SignedIP  String?   @map("witness2_signed_ip") @db.VarChar(45)
 
-  // PDF and hash fields for legal security
   pdfReportUrl       String?   @map("pdf_report_url") @db.VarChar(500)
   provisionalPdfPath String?   @map("provisional_pdf_path") @db.VarChar(500)
   finalPdfPath       String?   @map("final_pdf_path") @db.VarChar(500)
@@ -888,30 +871,24 @@ model Inspection {
   hashFinal          String?   @map("hash_final") @db.VarChar(255)
   reportGeneratedAt  DateTime? @map("report_generated_at") @db.Timestamp(0)
 
-  // Token and verification for immutability
   inspectionToken String? @unique @map("inspection_token") @db.VarChar(100)
   verificationUrl String? @map("verification_url") @db.VarChar(500)
 
-  // Client tracking info
   clientIP  String? @map("client_ip") @db.VarChar(45)
   userAgent String? @map("user_agent") @db.VarChar(500)
 
-  // Status and approval workflow
   status          String    @default("RASCUNHO") @db.VarChar(20)
   approvedById    BigInt?   @map("approved_by_id") @db.UnsignedBigInt
   approvedAt      DateTime? @map("approved_at") @db.Timestamp(0)
   rejectionReason String?   @map("rejection_reason") @db.Text
 
-  // Template reference
   templateId BigInt? @map("template_id") @db.UnsignedBigInt
 
-  // Location and audit
   location  String?  @db.VarChar(255)
   createdBy BigInt?  @map("created_by") @db.UnsignedBigInt
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
 
-  // Relations
   property                   Property                    @relation(fields: [propertyId], references: [id])
   inspector                  User                        @relation("InspectionInspector", fields: [inspectorId], references: [id])
   assignedBy                 User?                       @relation("InspectionAssignedBy", fields: [assignedById], references: [id])
@@ -983,14 +960,13 @@ model InspectionMedia {
   @@map("inspection_media")
 }
 
-// Audit trail for inspection actions (signatures, approvals, rejections)
 model InspectionAudit {
   id           BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
   inspectionId BigInt   @map("inspection_id") @db.UnsignedBigInt
-  action       String   @db.VarChar(50) // CREATED, SIGNED_BY_TENANT, SIGNED_BY_OWNER, SIGNED_BY_AGENCY, SIGNED_BY_INSPECTOR, APPROVED, REJECTED, PDF_GENERATED
+  action       String   @db.VarChar(50)
   performedBy  BigInt   @map("performed_by") @db.UnsignedBigInt
   performedAt  DateTime @default(now()) @map("performed_at") @db.Timestamp(0)
-  details      String?  @db.Text // JSON with additional info (IP, geolocation, etc.)
+  details      String?  @db.Text
 
   inspection Inspection @relation(fields: [inspectionId], references: [id])
 
@@ -998,11 +974,10 @@ model InspectionAudit {
   @@map("inspection_audits")
 }
 
-// Signature invitation links for external signing (tenant, owner)
 model InspectionSignatureLink {
   id           BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
   inspectionId BigInt    @map("inspection_id") @db.UnsignedBigInt
-  signerType   String    @map("signer_type") @db.VarChar(20) // TENANT, OWNER, AGENCY, INSPECTOR
+  signerType   String    @map("signer_type") @db.VarChar(20)
   signerEmail  String    @map("signer_email") @db.VarChar(191)
   signerName   String?   @map("signer_name") @db.VarChar(255)
   token        String    @unique @db.VarChar(191)
@@ -1481,12 +1456,10 @@ model TenantAnalysis {
   id    BigInt  @id @default(autoincrement()) @db.UnsignedBigInt
   token String? @unique @db.VarChar(50)
 
-  // Document Info
   document     String  @db.VarChar(20)
   documentType String  @map("document_type") @db.VarChar(10)
   name         String? @db.VarChar(255)
 
-  // Basic Data for CPF
   personStatus  String? @map("person_status") @db.VarChar(50)
   personAddress String? @map("person_address") @db.VarChar(500)
   personCity    String? @map("person_city") @db.VarChar(100)
@@ -1496,7 +1469,6 @@ model TenantAnalysis {
   birthDate     String? @map("birth_date") @db.VarChar(20)
   motherName    String? @map("mother_name") @db.VarChar(255)
 
-  // Basic Data for CNPJ
   companyName        String?   @map("company_name") @db.VarChar(255)
   tradingName        String?   @map("trading_name") @db.VarChar(255)
   companyStatus      String?   @map("company_status") @db.VarChar(50)
@@ -1507,15 +1479,12 @@ model TenantAnalysis {
   companyPhone       String?   @map("company_phone") @db.VarChar(30)
   companyOpeningDate DateTime? @map("company_opening_date") @db.Date
 
-  // Photo for identification
   photoPath     String? @map("photo_path") @db.VarChar(500)
   photoFilename String? @map("photo_filename") @db.VarChar(255)
 
-  // LGPD Acceptance
   lgpdAcceptedAt DateTime? @map("lgpd_accepted_at") @db.Timestamp(0)
   lgpdAcceptedBy BigInt?   @map("lgpd_accepted_by") @db.UnsignedBigInt
 
-  // References
   requestedById BigInt  @map("requested_by_id") @db.UnsignedBigInt
   agencyId      BigInt? @map("agency_id") @db.UnsignedBigInt
 
@@ -1638,27 +1607,22 @@ model Microtransaction {
   @@map("microtransactions")
 }
 
-// Usage tracking for billing and analytics
 model UsageRecord {
   id       BigInt @id @default(autoincrement()) @db.UnsignedBigInt
   agencyId BigInt @map("agency_id") @db.UnsignedBigInt
 
-  // Usage type matches microtransaction types
   type        String  @db.VarChar(50)
   quantity    Int     @default(1)
   unitPrice   Decimal @map("unit_price") @db.Decimal(10, 2)
   totalAmount Decimal @map("total_amount") @db.Decimal(10, 2)
 
-  // Billing period
   billingMonth String @map("billing_month") @db.VarChar(7) // Format: YYYY-MM
   plan         String @db.VarChar(20)
 
-  // Payment status
   billed   Boolean   @default(false)
   billedAt DateTime? @map("billed_at") @db.Timestamp(0)
   paidAt   DateTime? @map("paid_at") @db.Timestamp(0)
 
-  // Reference to specific entity
   referenceId   BigInt? @map("reference_id") @db.UnsignedBigInt
   referenceType String? @map("reference_type") @db.VarChar(50)
 
@@ -1674,21 +1638,17 @@ model UsageRecord {
   @@map("usage_records")
 }
 
-// Subscription Plans Configuration (stored in database for dynamic pricing)
 model SubscriptionPlan {
   id          BigInt  @id @default(autoincrement()) @db.UnsignedBigInt
   name        String  @unique @db.VarChar(50)
   displayName String  @map("display_name") @db.VarChar(100)
   description String? @db.Text
 
-  // Pricing
   monthlyPrice Decimal @map("monthly_price") @db.Decimal(10, 2)
 
-  // Contract-based limits (primary limit)
   maxActiveContracts Int @map("max_active_contracts")
   maxInternalUsers   Int @map("max_internal_users")
 
-  // Feature flags
   unlimitedInspections Boolean @default(false) @map("unlimited_inspections")
   unlimitedSettlements Boolean @default(false) @map("unlimited_settlements")
   unlimitedUsers       Boolean @default(false) @map("unlimited_users")
@@ -1700,22 +1660,18 @@ model SubscriptionPlan {
   prioritySupport      Boolean @default(false) @map("priority_support")
   support24x7          Boolean @default(false) @map("support_24x7")
 
-  // Pay-per-use pricing (varies by plan)
   extraContractPrice Decimal  @map("extra_contract_price") @db.Decimal(10, 2)
   inspectionPrice    Decimal? @map("inspection_price") @db.Decimal(10, 2)
   settlementPrice    Decimal? @map("settlement_price") @db.Decimal(10, 2)
   screeningPrice     Decimal  @map("screening_price") @db.Decimal(10, 2)
   apiAddOnPrice      Decimal? @map("api_addon_price") @db.Decimal(10, 2)
 
-  // Support tier
   supportTier String @default("EMAIL") @map("support_tier") @db.VarChar(30)
 
-  // Display order and status
   displayOrder Int     @default(0) @map("display_order")
   isActive     Boolean @default(true) @map("is_active")
   isPopular    Boolean @default(false) @map("is_popular")
 
-  // Features list (JSON array for display)
   featuresJson String? @map("features_json") @db.Text
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
@@ -1724,60 +1680,49 @@ model SubscriptionPlan {
   @@map("subscription_plans")
 }
 
-// =============================================================================
-// EXTRAJUDICIAL NOTIFICATION MODULE
-// Legal notification document with judicial value - used when agreement module
-// fails to resolve conflicts. Serves as legal proof that creditor notified
-// debtor before taking judicial action.
-// =============================================================================
-
 enum ExtrajudicialNotificationStatus {
-  RASCUNHO // Draft
-  GERADO // Auto-generated by system
-  AGUARDANDO_ENVIO // Waiting to be sent
-  ENVIADO // Sent to debtor
-  VISUALIZADO // Viewed by debtor
-  RESPONDIDO // Responded by debtor
-  RESOLVIDO // Resolved/Paid
-  REJEITADO // Rejected by debtor
-  PRAZO_EXPIRADO // Deadline expired
-  ENCAMINHADO_JUDICIAL // Forwarded to judicial process
-  CANCELADO // Cancelled
+  RASCUNHO
+  GERADO
+  AGUARDANDO_ENVIO
+  ENVIADO
+  VISUALIZADO
+  RESPONDIDO
+  RESOLVIDO
+  REJEITADO
+  PRAZO_EXPIRADO
+  ENCAMINHADO_JUDICIAL
+  CANCELADO
 }
 
 enum ExtrajudicialNotificationType {
-  COBRANCA_ALUGUEL // Rent collection
-  COBRANCA_CONDOMINIO // Condominium fees
-  COBRANCA_IPTU // Property tax
-  COBRANCA_MULTAS // Fines collection
-  COBRANCA_DANOS // Damage compensation
-  RESCISAO_CONTRATO // Contract termination notice
-  DESOCUPACAO // Vacancy notice
-  DIVERGENCIA_VISTORIA // Inspection divergence
-  OUTROS // Other
+  COBRANCA_ALUGUEL
+  COBRANCA_CONDOMINIO
+  COBRANCA_IPTU
+  COBRANCA_MULTAS
+  COBRANCA_DANOS
+  RESCISAO_CONTRATO
+  DESOCUPACAO
+  DIVERGENCIA_VISTORIA
+  OUTROS
 }
 
 model ExtrajudicialNotification {
   id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
 
-  // References
   contractId   BigInt? @map("contract_id") @db.UnsignedBigInt
   propertyId   BigInt  @map("property_id") @db.UnsignedBigInt
   agreementId  BigInt? @map("agreement_id") @db.UnsignedBigInt
   inspectionId BigInt? @map("inspection_id") @db.UnsignedBigInt
   agencyId     BigInt? @map("agency_id") @db.UnsignedBigInt
 
-  // Unique identifiers for legal tracking
   notificationToken  String  @unique @map("notification_token") @db.VarChar(100)
   notificationNumber String? @map("notification_number") @db.VarChar(50)
   protocolNumber     String? @map("protocol_number") @db.VarChar(50)
 
-  // Type and classification
   type     ExtrajudicialNotificationType
   status   ExtrajudicialNotificationStatus @default(RASCUNHO)
   priority String                          @default("NORMAL") @db.VarChar(20) // URGENT, HIGH, NORMAL, LOW
 
-  // Creditor (who is sending the notification)
   creditorId       BigInt  @map("creditor_id") @db.UnsignedBigInt
   creditorName     String  @map("creditor_name") @db.VarChar(255)
   creditorDocument String  @map("creditor_document") @db.VarChar(30)
@@ -1785,7 +1730,6 @@ model ExtrajudicialNotification {
   creditorEmail    String? @map("creditor_email") @db.VarChar(191)
   creditorPhone    String? @map("creditor_phone") @db.VarChar(30)
 
-  // Debtor (who is receiving the notification)
   debtorId       BigInt  @map("debtor_id") @db.UnsignedBigInt
   debtorName     String  @map("debtor_name") @db.VarChar(255)
   debtorDocument String  @map("debtor_document") @db.VarChar(30)
@@ -1793,14 +1737,12 @@ model ExtrajudicialNotification {
   debtorEmail    String? @map("debtor_email") @db.VarChar(191)
   debtorPhone    String? @map("debtor_phone") @db.VarChar(30)
 
-  // Notification content
   title          String @db.VarChar(255)
   subject        String @db.Text // Main subject/object of the notification
   description    String @db.Text // Detailed description of the situation
   legalBasis     String @map("legal_basis") @db.Text // Legal foundation (articles, laws)
   demandedAction String @map("demanded_action") @db.Text // What action is being demanded
 
-  // Financial details
   principalAmount  Decimal? @map("principal_amount") @db.Decimal(12, 2) // Original debt
   fineAmount       Decimal? @map("fine_amount") @db.Decimal(12, 2) // Fines
   interestAmount   Decimal? @map("interest_amount") @db.Decimal(12, 2) // Interest
@@ -1808,15 +1750,12 @@ model ExtrajudicialNotification {
   lawyerFees       Decimal? @map("lawyer_fees") @db.Decimal(12, 2) // Attorney fees
   totalAmount      Decimal  @map("total_amount") @db.Decimal(12, 2) // Total amount due
 
-  // Deadline
   deadlineDays    Int      @map("deadline_days") // Days to comply
   deadlineDate    DateTime @map("deadline_date") @db.Date // Calculated deadline date
   gracePeriodDays Int?     @map("grace_period_days") // Additional grace period
 
-  // Consequences of non-compliance
   consequencesText String? @map("consequences_text") @db.Text
 
-  // Delivery tracking
   sentAt          DateTime? @map("sent_at") @db.Timestamp(0)
   sentVia         String?   @map("sent_via") @db.VarChar(50) // EMAIL, WHATSAPP, REGISTERED_MAIL, IN_PERSON
   deliveredAt     DateTime? @map("delivered_at") @db.Timestamp(0)
@@ -1825,12 +1764,10 @@ model ExtrajudicialNotification {
   viewedIP        String?   @map("viewed_ip") @db.VarChar(45)
   viewedUserAgent String?   @map("viewed_user_agent") @db.VarChar(500)
 
-  // Response from debtor
   responseAt       DateTime? @map("response_at") @db.Timestamp(0)
   responseText     String?   @map("response_text") @db.Text
   responseAccepted Boolean?  @map("response_accepted")
 
-  // Signatures (both parties must sign for full legal effect)
   creditorSignature   String?   @map("creditor_signature") @db.Text
   creditorSignedAt    DateTime? @map("creditor_signed_at") @db.Timestamp(0)
   creditorSignedIP    String?   @map("creditor_signed_ip") @db.VarChar(45)
@@ -1845,7 +1782,6 @@ model ExtrajudicialNotification {
   debtorGeoLat      Float?    @map("debtor_geo_lat")
   debtorGeoLng      Float?    @map("debtor_geo_lng")
 
-  // Witness signatures (for added legal weight)
   witness1Signature String?   @map("witness1_signature") @db.Text
   witness1Name      String?   @map("witness1_name") @db.VarChar(255)
   witness1Document  String?   @map("witness1_document") @db.VarChar(30)
@@ -1856,42 +1792,34 @@ model ExtrajudicialNotification {
   witness2Document  String?   @map("witness2_document") @db.VarChar(30)
   witness2SignedAt  DateTime? @map("witness2_signed_at") @db.Timestamp(0)
 
-  // PDF and hash for legal immutability
   provisionalPdfPath String?   @map("provisional_pdf_path") @db.VarChar(500)
   provisionalHash    String?   @map("provisional_hash") @db.VarChar(255)
   finalPdfPath       String?   @map("final_pdf_path") @db.VarChar(500)
   hashFinal          String?   @map("hash_final") @db.VarChar(255)
   pdfGeneratedAt     DateTime? @map("pdf_generated_at") @db.Timestamp(0)
 
-  // Verification URL for document authenticity
   verificationUrl String? @map("verification_url") @db.VarChar(500)
 
-  // Client tracking
   clientIP  String? @map("client_ip") @db.VarChar(45)
   userAgent String? @map("user_agent") @db.VarChar(500)
 
-  // Resolution
   resolvedAt       DateTime? @map("resolved_at") @db.Timestamp(0)
   resolvedBy       BigInt?   @map("resolved_by") @db.UnsignedBigInt
   resolutionMethod String?   @map("resolution_method") @db.VarChar(50) // PAYMENT, AGREEMENT, JUDICIAL, CANCELLED
   resolutionNotes  String?   @map("resolution_notes") @db.Text
 
-  // If forwarded to judicial process
   judicialForwardedAt   DateTime? @map("judicial_forwarded_at") @db.Timestamp(0)
   judicialProcessNumber String?   @map("judicial_process_number") @db.VarChar(50)
   judicialCourt         String?   @map("judicial_court") @db.VarChar(255)
   judicialNotes         String?   @map("judicial_notes") @db.Text
 
-  // Attachments (JSON array of file references)
   attachments String? @db.Text
 
-  // Audit fields
   notes     String?  @db.Text
   createdBy BigInt   @map("created_by") @db.UnsignedBigInt
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
 
-  // Relations
   contract       Contract?   @relation(fields: [contractId], references: [id])
   property       Property    @relation(fields: [propertyId], references: [id])
   agreement      Agreement?  @relation(fields: [agreementId], references: [id])
@@ -1915,7 +1843,6 @@ model ExtrajudicialNotification {
   @@map("extrajudicial_notifications")
 }
 
-// Audit trail for extrajudicial notification actions
 model ExtrajudicialNotificationAudit {
   id             BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
   notificationId BigInt   @map("notification_id") @db.UnsignedBigInt
@@ -1931,11 +1858,6 @@ model ExtrajudicialNotificationAudit {
   @@index([notificationId])
   @@map("extrajudicial_notification_audits")
 }
-
-// =============================================================================
-// WEBHOOK LOG
-// Audit log for external webhook events (Asaas, etc.)
-// =============================================================================
 
 model WebhookLog {
   id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt

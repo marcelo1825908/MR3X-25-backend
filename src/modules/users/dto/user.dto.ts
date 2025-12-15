@@ -108,6 +108,26 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   rg?: string;
+
+  @ApiPropertyOptional({ example: 'Banco do Brasil' })
+  @IsOptional()
+  @IsString()
+  bankName?: string;
+
+  @ApiPropertyOptional({ example: '1234-5' })
+  @IsOptional()
+  @IsString()
+  bankBranch?: string;
+
+  @ApiPropertyOptional({ example: '12345-6' })
+  @IsOptional()
+  @IsString()
+  bankAccount?: string;
+
+  @ApiPropertyOptional({ example: 'email@example.com' })
+  @IsOptional()
+  @IsString()
+  pixKey?: string;
 }
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {}

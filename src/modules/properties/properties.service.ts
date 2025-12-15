@@ -65,6 +65,10 @@ export class PropertiesService {
               employerName: true,
               creci: true,
               creciState: true,
+              bankName: true,
+              bankBranch: true,
+              bankAccount: true,
+              pixKey: true,
               company: {
                 select: {
                   id: true,
@@ -167,6 +171,10 @@ export class PropertiesService {
             employerName: true,
             creci: true,
             creciState: true,
+            bankName: true,
+            bankBranch: true,
+            bankAccount: true,
+            pixKey: true,
             company: {
               select: {
                 id: true,
@@ -430,6 +438,10 @@ export class PropertiesService {
             profession: true,
             rg: true,
             birthDate: true,
+            bankName: true,
+            bankBranch: true,
+            bankAccount: true,
+            pixKey: true,
           }
         },
         tenant: {
@@ -518,6 +530,10 @@ export class PropertiesService {
             profession: true,
             rg: true,
             birthDate: true,
+            bankName: true,
+            bankBranch: true,
+            bankAccount: true,
+            pixKey: true,
           }
         },
         tenant: {

@@ -157,6 +157,10 @@ export class UsersService {
           isFrozen: true,
           frozenAt: true,
           frozenReason: true,
+          bankName: true,
+          bankBranch: true,
+          bankAccount: true,
+          pixKey: true,
           agency: {
             select: { id: true, name: true },
           },
@@ -334,6 +338,10 @@ export class UsersService {
         maritalStatus: dto.maritalStatus,
         profession: dto.profession,
         rg: dto.rg,
+        bankName: dto.bankName,
+        bankBranch: dto.bankBranch,
+        bankAccount: dto.bankAccount,
+        pixKey: dto.pixKey,
       },
     });
 
@@ -394,6 +402,10 @@ export class UsersService {
     if (dto.maritalStatus !== undefined) updateData.maritalStatus = dto.maritalStatus;
     if (dto.profession !== undefined) updateData.profession = dto.profession;
     if (dto.rg !== undefined) updateData.rg = dto.rg;
+    if (dto.bankName !== undefined) updateData.bankName = dto.bankName;
+    if (dto.bankBranch !== undefined) updateData.bankBranch = dto.bankBranch;
+    if (dto.bankAccount !== undefined) updateData.bankAccount = dto.bankAccount;
+    if (dto.pixKey !== undefined) updateData.pixKey = dto.pixKey;
 
     if (dto.password) {
       updateData.password = await bcrypt.hash(dto.password, 10);
