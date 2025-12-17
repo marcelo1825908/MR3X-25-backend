@@ -33,8 +33,8 @@ interface SignContractDto {
 interface SignContractWithGeoDto {
   signature: string;
   signatureType: 'tenant' | 'owner' | 'agency' | 'witness';
-  geoLat: number;
-  geoLng: number;
+  geoLat?: number;
+  geoLng?: number;
   geoConsent: boolean;
   witnessName?: string;
   witnessDocument?: string;
@@ -231,13 +231,9 @@ export class ContractsController {
     @CurrentUser('sub') userId: string,
     @Req() req: Request,
   ) {
-    if (!body.geoLat || !body.geoLng) {
-      throw new BadRequestException('Geolocalização é obrigatória para assinar o contrato');
-    }
-
-    if (!body.geoConsent) {
-      throw new BadRequestException('É necessário consentir com o compartilhamento de localização');
-    }
+    // Geolocation is now optional - allows signing without HTTPS
+    // If geoConsent is true but no coordinates, it means geolocation was unavailable (HTTP)
+    const hasGeolocation = body.geoLat !== undefined && body.geoLng !== undefined;
 
     const clientIP = req.ip || req.connection?.remoteAddress || 'unknown';
     const userAgent = req.headers['user-agent'] || 'unknown';
@@ -249,8 +245,8 @@ export class ContractsController {
         signature: body.signature,
         clientIP,
         userAgent,
-        geoLat: body.geoLat,
-        geoLng: body.geoLng,
+        geoLat: hasGeolocation ? body.geoLat : null,
+        geoLng: hasGeolocation ? body.geoLng : null,
         geoConsent: body.geoConsent,
         witnessName: body.witnessName,
         witnessDocument: body.witnessDocument,

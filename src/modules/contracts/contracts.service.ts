@@ -12,8 +12,8 @@ export interface SignatureDataWithGeo {
   signature: string;
   clientIP?: string;
   userAgent?: string;
-  geoLat: number;
-  geoLng: number;
+  geoLat?: number | null;
+  geoLng?: number | null;
   geoConsent: boolean;
   witnessName?: string;
   witnessDocument?: string;
@@ -713,13 +713,8 @@ export class ContractsService {
     signatureData: SignatureDataWithGeo,
     userId: string,
   ) {
-    if (!signatureData.geoLat || !signatureData.geoLng) {
-      throw new BadRequestException('Geolocalização é obrigatória para assinar o contrato');
-    }
-
-    if (!signatureData.geoConsent) {
-      throw new BadRequestException('É necessário consentir com o compartilhamento de localização');
-    }
+    // Geolocation is now optional - allows signing without HTTPS
+    // If geoLat/geoLng are null, it means geolocation was unavailable
 
     const contract = await this.prisma.contract.findUnique({
       where: { id: BigInt(id) },
