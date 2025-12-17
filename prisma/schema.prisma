@@ -406,7 +406,7 @@ model Contract {
   deposit         Decimal?  @map("deposit") @db.Decimal(12, 2)
   dueDay          Int?      @map("due_day")
   description     String?   @db.Text
-  status          String    @db.VarChar(20)
+  status          String    @db.VarChar(30)
 
   earlyTerminationPenaltyPercent Decimal? @default(3.0) @map("early_termination_penalty_percent") @db.Decimal(5, 2)
   lateFeePercent                 Decimal? @default(2.0) @map("late_fee_percent") @db.Decimal(5, 2)
