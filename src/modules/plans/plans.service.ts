@@ -23,6 +23,7 @@ export interface PlanUpdateDTO {
   propertyLimit?: number;
   userLimit?: number;
   contractLimit?: number;
+  tenantLimit?: number;
   features?: string[];
   description?: string;
   isActive?: boolean;
@@ -147,7 +148,7 @@ export class PlansService {
 
     const plans = this.getPlansWithUpdates();
     return plans.map(plan => {
-      // Get the full config to access free usage limits
+      // Get the full config to access free usage limits and tenant limits
       const planConfig = PLANS_CONFIG[plan.name];
       return {
         ...plan,
@@ -160,6 +161,10 @@ export class PlansService {
         freeSearches: planConfig?.freeSearches ?? 0,
         freeSettlements: planConfig?.freeSettlements ?? 0,
         freeApiCalls: planConfig?.freeApiCalls ?? 0,
+        // Include tenant limit (separate from internal users)
+        // 1 contract = 1 tenant, so maxTenants should match maxActiveContracts
+        maxTenants: planConfig?.maxTenants ?? planConfig?.maxActiveContracts ?? 1,
+        tenantLimit: planConfig?.maxTenants ?? planConfig?.maxActiveContracts ?? 1,
       };
     });
   }
@@ -693,6 +698,8 @@ export class PlansService {
       const updateData: Partial<PlanConfig> = {
         price: data.price,
         maxActiveContracts: data.contractLimit ?? data.propertyLimit,
+        maxProperties: data.propertyLimit,
+        maxTenants: data.tenantLimit ?? data.contractLimit ?? data.propertyLimit,
         maxInternalUsers: data.userLimit,
         features: data.features,
         description: data.description,
@@ -720,6 +727,8 @@ export class PlansService {
       const updateData: Partial<PlanConfig> = {
         price: data.price,
         maxActiveContracts: data.contractLimit ?? data.propertyLimit,
+        maxProperties: data.propertyLimit,
+        maxTenants: data.tenantLimit ?? data.contractLimit ?? data.propertyLimit,
         maxInternalUsers: data.userLimit,
         features: data.features,
         description: data.description,
