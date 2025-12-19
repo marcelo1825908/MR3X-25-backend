@@ -441,6 +441,13 @@ export class CellereService {
       if (cpfData?.Email) emails.push(cpfData.Email);
       if (cpfData?.EnderecoEmail) emails.push(cpfData.EnderecoEmail);
 
+      // Build full street name including type (RUA, AV, etc.)
+      const tipoLogradouro = endereco?.TipoLogradouro || cpfData?.TipoLogradouro || '';
+      const logradouroNome = endereco?.Logradouro || cpfData?.Logradouro || '';
+      const fullLogradouro = tipoLogradouro
+        ? `${tipoLogradouro} ${logradouroNome}`.trim()
+        : logradouroNome;
+
       return {
         name: cpfData?.Nome || rfData?.NomePessoaFisica,
         birthDate: cpfData?.DataNascimento || rfData?.DataNascimento,
@@ -455,7 +462,7 @@ export class CellereService {
         debtDetails: [],
         status: hasIssues ? 'WARNING' : 'CLEAR',
         address: hasAddress ? {
-          logradouro: endereco?.Logradouro || cpfData?.Logradouro,
+          logradouro: fullLogradouro,
           numero: endereco?.Numero || cpfData?.Numero,
           bairro: endereco?.Bairro || cpfData?.Bairro,
           cidade: endereco?.Cidade || cpfData?.Cidade,
@@ -574,8 +581,15 @@ export class CellereService {
 
     let address: DocumentValidationResponse['address'];
     if (hasNestedAddress) {
+      // Build full street name including type (RUA, AV, etc.)
+      const tipoLogradouro = endereco?.TipoLogradouro || endereco?.tipoLogradouro || '';
+      const logradouroNome = endereco?.Logradouro || endereco?.logradouro || '';
+      const fullLogradouro = tipoLogradouro
+        ? `${tipoLogradouro} ${logradouroNome}`.trim()
+        : logradouroNome;
+
       address = {
-        logradouro: endereco.Logradouro || endereco.logradouro,
+        logradouro: fullLogradouro,
         numero: endereco.Numero || endereco.numero,
         bairro: endereco.Bairro || endereco.bairro,
         cidade: endereco.Cidade || endereco.cidade || endereco.Municipio,
@@ -583,8 +597,15 @@ export class CellereService {
         cep: endereco.CEP || endereco.cep,
       };
     } else if (hasDirectAddress) {
+      // Build full street name including type (RUA, AV, etc.)
+      const tipoLogradouro = data?.TipoLogradouro || '';
+      const logradouroNome = data?.Logradouro || '';
+      const fullLogradouro = tipoLogradouro
+        ? `${tipoLogradouro} ${logradouroNome}`.trim()
+        : logradouroNome;
+
       address = {
-        logradouro: data.Logradouro,
+        logradouro: fullLogradouro,
         numero: data.Numero,
         bairro: data.Bairro,
         cidade: data.Cidade || data.Municipio,
