@@ -633,9 +633,28 @@ export class PlanEnforcementService {
     const contractResult = await this.freezeExcessContracts(agencyId, planConfig.maxActiveContracts);
     result.contractsFrozen = contractResult.frozen;
 
-    const userLimit = planConfig.maxInternalUsers === -1 ? 9999 : planConfig.maxInternalUsers;
-    const userResult = await this.freezeExcessUsers(agencyId, userLimit);
-    result.usersFrozen = userResult.frozen;
+    // Freeze excess users by role (per-role limits)
+    let totalUsersFrozen = 0;
+
+    // Freeze excess brokers
+    if (planConfig.maxBrokers !== undefined && planConfig.maxBrokers !== -1 && planConfig.maxBrokers < 9999) {
+      const brokerResult = await this.freezeExcessUsersByRole(agencyId, UserRole.BROKER, planConfig.maxBrokers);
+      totalUsersFrozen += brokerResult.frozen;
+    }
+
+    // Freeze excess managers
+    if (planConfig.maxManagers !== undefined && planConfig.maxManagers !== -1 && planConfig.maxManagers < 9999) {
+      const managerResult = await this.freezeExcessUsersByRole(agencyId, UserRole.AGENCY_MANAGER, planConfig.maxManagers);
+      totalUsersFrozen += managerResult.frozen;
+    }
+
+    // Freeze excess owners (proprietarios)
+    if (planConfig.maxOwners !== undefined && planConfig.maxOwners !== -1 && planConfig.maxOwners < 9999) {
+      const ownerResult = await this.freezeExcessUsersByRole(agencyId, UserRole.PROPRIETARIO, planConfig.maxOwners);
+      totalUsersFrozen += ownerResult.frozen;
+    }
+
+    result.usersFrozen = totalUsersFrozen;
 
     const propertyResult = await this.freezeExcessProperties(agencyId, planConfig.maxProperties);
     result.propertiesFrozen = propertyResult.frozen;
@@ -708,9 +727,21 @@ export class PlanEnforcementService {
       const contractResult = await this.freezeExcessContracts(agencyId, newConfig.maxActiveContracts);
       result.contractsFrozen = contractResult.frozen;
 
-      const userLimit = newConfig.maxInternalUsers === -1 ? 9999 : newConfig.maxInternalUsers;
-      const userResult = await this.freezeExcessUsers(agencyId, userLimit);
-      result.usersFrozen = userResult.frozen;
+      // Freeze excess users by role (per-role limits)
+      let totalUsersFrozen = 0;
+      if (newConfig.maxBrokers !== undefined && newConfig.maxBrokers !== -1 && newConfig.maxBrokers < 9999) {
+        const brokerResult = await this.freezeExcessUsersByRole(agencyId, UserRole.BROKER, newConfig.maxBrokers);
+        totalUsersFrozen += brokerResult.frozen;
+      }
+      if (newConfig.maxManagers !== undefined && newConfig.maxManagers !== -1 && newConfig.maxManagers < 9999) {
+        const managerResult = await this.freezeExcessUsersByRole(agencyId, UserRole.AGENCY_MANAGER, newConfig.maxManagers);
+        totalUsersFrozen += managerResult.frozen;
+      }
+      if (newConfig.maxOwners !== undefined && newConfig.maxOwners !== -1 && newConfig.maxOwners < 9999) {
+        const ownerResult = await this.freezeExcessUsersByRole(agencyId, UserRole.PROPRIETARIO, newConfig.maxOwners);
+        totalUsersFrozen += ownerResult.frozen;
+      }
+      result.usersFrozen = totalUsersFrozen;
 
       const propertyResult = await this.freezeExcessProperties(agencyId, newConfig.maxProperties);
       result.propertiesFrozen = propertyResult.frozen;
@@ -734,9 +765,30 @@ export class PlanEnforcementService {
       const contractResult = await this.unfreezeContracts(agencyId, newConfig.maxActiveContracts);
       result.contractsUnfrozen = contractResult.unfrozen;
 
-      const userLimit = newConfig.maxInternalUsers === -1 ? 9999 : newConfig.maxInternalUsers;
-      const userResult = await this.unfreezeUsers(agencyId, userLimit);
-      result.usersUnfrozen = userResult.unfrozen;
+      // Unfreeze users by role (per-role limits)
+      let totalUsersUnfrozen = 0;
+      if (newConfig.maxBrokers !== undefined && (newConfig.maxBrokers === -1 || newConfig.maxBrokers >= 9999)) {
+        const brokerResult = await this.unfreezeUsersByRole(agencyId, UserRole.BROKER);
+        totalUsersUnfrozen += brokerResult.unfrozen;
+      } else if (newConfig.maxBrokers !== undefined) {
+        const brokerResult = await this.unfreezeUsersByRoleWithLimit(agencyId, UserRole.BROKER, newConfig.maxBrokers);
+        totalUsersUnfrozen += brokerResult.unfrozen;
+      }
+      if (newConfig.maxManagers !== undefined && (newConfig.maxManagers === -1 || newConfig.maxManagers >= 9999)) {
+        const managerResult = await this.unfreezeUsersByRole(agencyId, UserRole.AGENCY_MANAGER);
+        totalUsersUnfrozen += managerResult.unfrozen;
+      } else if (newConfig.maxManagers !== undefined) {
+        const managerResult = await this.unfreezeUsersByRoleWithLimit(agencyId, UserRole.AGENCY_MANAGER, newConfig.maxManagers);
+        totalUsersUnfrozen += managerResult.unfrozen;
+      }
+      if (newConfig.maxOwners !== undefined && (newConfig.maxOwners === -1 || newConfig.maxOwners >= 9999)) {
+        const ownerResult = await this.unfreezeUsersByRole(agencyId, UserRole.PROPRIETARIO);
+        totalUsersUnfrozen += ownerResult.unfrozen;
+      } else if (newConfig.maxOwners !== undefined) {
+        const ownerResult = await this.unfreezeUsersByRoleWithLimit(agencyId, UserRole.PROPRIETARIO, newConfig.maxOwners);
+        totalUsersUnfrozen += ownerResult.unfrozen;
+      }
+      result.usersUnfrozen = totalUsersUnfrozen;
 
       const propertyResult = await this.unfreezeProperties(agencyId, newConfig.maxProperties);
       result.propertiesUnfrozen = propertyResult.unfrozen;
@@ -904,6 +956,49 @@ export class PlanEnforcementService {
     };
   }
 
+  async freezeExcessUsersByRole(agencyId: string, role: UserRole, limit: number): Promise<FreezeResult> {
+    const activeUsers = await this.prisma.user.findMany({
+      where: {
+        agencyId: BigInt(agencyId),
+        isFrozen: false,
+        status: 'ACTIVE',
+        role: role,
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, name: true, email: true, role: true, createdAt: true },
+    });
+
+    if (activeUsers.length <= limit) {
+      return {
+        frozen: 0,
+        kept: activeUsers.map(u => u.id.toString()),
+        message: `${this.getRoleDisplayName(role)} dentro do limite do plano`,
+      };
+    }
+
+    const toKeepActive = activeUsers.slice(0, limit);
+    const toFreeze = activeUsers.slice(limit);
+
+    const frozenIds: string[] = [];
+    for (const user of toFreeze) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          isFrozen: true,
+          frozenAt: new Date(),
+          frozenReason: `Limite de ${limit} ${this.getRoleDisplayName(role)} atingido. ${PLAN_MESSAGES.USER_FROZEN}`,
+        },
+      });
+      frozenIds.push(user.id.toString());
+    }
+
+    return {
+      frozen: frozenIds.length,
+      kept: toKeepActive.map(u => u.id.toString()),
+      message: `${frozenIds.length} ${this.getRoleDisplayName(role)} foram congelados devido ao limite do plano.`,
+    };
+  }
+
   async freezeExcessUsers(agencyId: string, limit: number): Promise<FreezeResult> {
     // Only count users subject to plan limits (exclude platform and agency admin roles)
     const activeUsers = await this.prisma.user.findMany({
@@ -1009,6 +1104,81 @@ export class PlanEnforcementService {
     return {
       unfrozen: frozenContracts.length,
       message: `${frozenContracts.length} contrato(s) foram desbloqueados.`,
+    };
+  }
+
+  async unfreezeUsersByRole(agencyId: string, role: UserRole): Promise<UnfreezeResult> {
+    // Unfreeze all frozen users of this role
+    const frozenUsers = await this.prisma.user.findMany({
+      where: {
+        agencyId: BigInt(agencyId),
+        isFrozen: true,
+        role: role,
+      },
+      select: { id: true },
+    });
+
+    for (const user of frozenUsers) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          isFrozen: false,
+          frozenAt: null,
+          frozenReason: null,
+        },
+      });
+    }
+
+    return {
+      unfrozen: frozenUsers.length,
+      message: `${frozenUsers.length} ${this.getRoleDisplayName(role)} foram reativados.`,
+    };
+  }
+
+  async unfreezeUsersByRoleWithLimit(agencyId: string, role: UserRole, limit: number): Promise<UnfreezeResult> {
+    const activeCount = await this.prisma.user.count({
+      where: {
+        agencyId: BigInt(agencyId),
+        isFrozen: false,
+        status: 'ACTIVE',
+        role: role,
+      },
+    });
+
+    const canUnfreeze = Math.max(0, limit - activeCount);
+
+    if (canUnfreeze === 0) {
+      return {
+        unfrozen: 0,
+        message: `Nenhum ${this.getRoleDisplayName(role)} para descongelar.`,
+      };
+    }
+
+    const frozenUsers = await this.prisma.user.findMany({
+      where: {
+        agencyId: BigInt(agencyId),
+        isFrozen: true,
+        role: role,
+      },
+      orderBy: { frozenAt: 'asc' },
+      take: canUnfreeze,
+      select: { id: true },
+    });
+
+    for (const user of frozenUsers) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          isFrozen: false,
+          frozenAt: null,
+          frozenReason: null,
+        },
+      });
+    }
+
+    return {
+      unfrozen: frozenUsers.length,
+      message: `${frozenUsers.length} ${this.getRoleDisplayName(role)} foram reativados.`,
     };
   }
 

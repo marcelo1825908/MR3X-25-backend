@@ -557,6 +557,39 @@ export class AgenciesService {
     return this.planEnforcement.checkUserOperationAllowed(agencyId, 'create', undefined, targetRole);
   }
 
+  async checkPropertyCreationAllowed(agencyId: string) {
+    const agency = await this.prisma.agency.findUnique({
+      where: { id: BigInt(agencyId) },
+      select: { id: true, plan: true },
+    });
+
+    if (!agency) {
+      return { allowed: false, message: 'Agência não encontrada' };
+    }
+
+    const { getPlanByName, PLANS_CONFIG } = await import('../plans/plans.data');
+    const planConfig = getPlanByName(agency.plan) || PLANS_CONFIG.FREE;
+
+    const propertyCount = await this.prisma.property.count({
+      where: {
+        agencyId: BigInt(agencyId),
+        deleted: false,
+        isFrozen: false,
+      },
+    });
+
+    if (propertyCount >= planConfig.maxProperties) {
+      return {
+        allowed: false,
+        message: `Você atingiu o limite de ${planConfig.maxProperties} imóvel(is) do seu plano ${planConfig.displayName}. Faça upgrade para adicionar mais.`,
+        current: propertyCount,
+        limit: planConfig.maxProperties,
+      };
+    }
+
+    return { allowed: true };
+  }
+
   async changePlan(agencyId: string, newPlan: string) {
     const agency = await this.prisma.agency.findUnique({
       where: { id: BigInt(agencyId) },

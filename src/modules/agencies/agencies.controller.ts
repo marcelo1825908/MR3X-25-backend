@@ -111,6 +111,12 @@ export class AgenciesController {
     return this.agenciesService.checkUserCreationAllowed(id, role);
   }
 
+  @Get(':id/check-property-creation')
+  @ApiOperation({ summary: 'Check if property creation is allowed for the agency' })
+  async checkPropertyCreationAllowed(@Param('id') id: string) {
+    return this.agenciesService.checkPropertyCreationAllowed(id);
+  }
+
   @Post(':id/confirm-plan-payment')
   @ApiOperation({ summary: 'Manually confirm plan change payment (marks as paid in Asaas and updates plan)' })
   async confirmPlanPayment(
