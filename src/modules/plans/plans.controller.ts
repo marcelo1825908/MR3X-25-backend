@@ -384,4 +384,67 @@ export class PlansController {
   async getUserUsage(@Param('userId') userId: string) {
     return this.plansService.getPlanUsage(userId);
   }
+
+  // ==================== INDEPENDENT OWNER PLAN MANAGEMENT ====================
+
+  @Get('owner/:userId/plan-usage')
+  @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.INDEPENDENT_OWNER)
+  @ApiOperation({ summary: 'Get plan usage for independent owner' })
+  async getOwnerPlanUsage(@Param('userId') userId: string) {
+    return this.plansService.getOwnerPlanUsage(userId);
+  }
+
+  @Get('owner/:userId/preview-change/:targetPlan')
+  @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.INDEPENDENT_OWNER)
+  @ApiOperation({ summary: 'Preview plan change for independent owner' })
+  async previewOwnerPlanChange(
+    @Param('userId') userId: string,
+    @Param('targetPlan') targetPlan: string,
+  ) {
+    return this.plansService.previewOwnerPlanChange(userId, targetPlan.toUpperCase());
+  }
+
+  @Post('owner/:userId/change-plan')
+  @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.INDEPENDENT_OWNER)
+  @ApiOperation({ summary: 'Change plan for independent owner (for downgrades/free)' })
+  async changeOwnerPlan(
+    @Param('userId') userId: string,
+    @Body() body: { newPlan: string },
+  ) {
+    return this.plansService.changeOwnerPlan(userId, body.newPlan.toUpperCase());
+  }
+
+  @Post('owner/:userId/create-plan-payment')
+  @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.INDEPENDENT_OWNER)
+  @ApiOperation({ summary: 'Create payment for independent owner plan upgrade' })
+  async createOwnerPlanPayment(
+    @Param('userId') userId: string,
+    @Body() body: { newPlan: string },
+  ) {
+    return this.plansService.createOwnerPlanPayment(userId, body.newPlan.toUpperCase());
+  }
+
+  @Post('owner/:userId/confirm-plan-payment')
+  @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.INDEPENDENT_OWNER)
+  @ApiOperation({ summary: 'Confirm payment and apply plan change for independent owner' })
+  async confirmOwnerPlanPayment(
+    @Param('userId') userId: string,
+    @Body() body: { paymentId: string; newPlan: string },
+  ) {
+    return this.plansService.confirmOwnerPlanPayment(userId, body.paymentId, body.newPlan.toUpperCase());
+  }
+
+  @Get('owner/:userId/frozen-entities')
+  @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.INDEPENDENT_OWNER)
+  @ApiOperation({ summary: 'Get frozen entities for independent owner' })
+  async getOwnerFrozenEntities(@Param('userId') userId: string) {
+    return this.plansService.getOwnerFrozenEntities(userId);
+  }
+
+  @Get('owner/:userId/check-property-creation')
+  @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.INDEPENDENT_OWNER)
+  @ApiOperation({ summary: 'Check if independent owner can create a new property' })
+  async checkOwnerPropertyCreationAllowed(@Param('userId') userId: string) {
+    return this.plansService.checkOwnerPropertyCreationAllowed(userId);
+  }
 }

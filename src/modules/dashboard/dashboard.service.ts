@@ -1409,6 +1409,152 @@ export class DashboardService {
     }
   }
 
+  async getBillingData() {
+    try {
+      const now = new Date();
+      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const currentMonthName = now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      // Get all agencies with payment data
+      const agencies = await this.prisma.agency.findMany({
+        where: { status: 'ACTIVE' },
+        select: {
+          id: true,
+          name: true,
+          cnpj: true,
+          email: true,
+          plan: true,
+          totalSpent: true,
+          lastPaymentAt: true,
+          lastPaymentAmount: true,
+          subscriptionStatus: true,
+          createdAt: true,
+        },
+        orderBy: { lastPaymentAt: 'desc' },
+      });
+
+      // Get all microtransactions
+      const allMicrotransactions = await this.prisma.microtransaction.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: {
+          agency: {
+            select: { id: true, name: true, plan: true },
+          },
+          user: {
+            select: { id: true, name: true, role: true },
+          },
+        },
+      });
+
+      // Calculate statistics from agencies
+      const totalAgencyRevenue = agencies.reduce((sum, a) => sum + Number(a.totalSpent || 0), 0);
+
+      // This month revenue from agencies
+      const thisMonthAgencyPayments = agencies.filter(a =>
+        a.lastPaymentAt && new Date(a.lastPaymentAt) >= firstDayOfMonth
+      );
+      const thisMonthAgencyRevenue = thisMonthAgencyPayments.reduce(
+        (sum, a) => sum + Number(a.lastPaymentAmount || 0), 0
+      );
+
+      // Microtransaction stats
+      const paidTransactions = allMicrotransactions.filter(m => m.status === 'PAID');
+      const pendingTransactions = allMicrotransactions.filter(m => m.status === 'PENDING');
+      const overdueTransactions = allMicrotransactions.filter(m =>
+        m.status === 'PENDING' && new Date(m.createdAt) < thirtyDaysAgo
+      );
+
+      const microRevenue = paidTransactions.reduce((sum, m) => sum + Number(m.amount || 0), 0);
+      const thisMonthMicroPaid = paidTransactions.filter(m =>
+        m.paidAt && new Date(m.paidAt) >= firstDayOfMonth
+      );
+      const thisMonthMicroRevenue = thisMonthMicroPaid.reduce((sum, m) => sum + Number(m.amount || 0), 0);
+      const pendingAmount = pendingTransactions.reduce((sum, m) => sum + Number(m.amount || 0), 0);
+      const overdueAmount = overdueTransactions.reduce((sum, m) => sum + Number(m.amount || 0), 0);
+
+      // Build invoices list from both agencies and microtransactions
+      const invoices: any[] = [];
+
+      // Add agency payment records
+      agencies.forEach(agency => {
+        if (agency.lastPaymentAt && Number(agency.lastPaymentAmount || 0) > 0) {
+          invoices.push({
+            id: `AGY-${agency.id.toString().padStart(6, '0')}`,
+            transactionId: agency.id.toString(),
+            agencyName: agency.name,
+            agencyId: agency.id.toString(),
+            plan: agency.plan || 'FREE',
+            type: 'PLAN_SUBSCRIPTION',
+            description: `Assinatura do plano ${agency.plan || 'FREE'}`,
+            amount: Number(agency.lastPaymentAmount || 0),
+            issueDate: agency.lastPaymentAt,
+            dueDate: null,
+            status: 'paid',
+            paymentDate: agency.lastPaymentAt,
+            asaasPaymentId: null,
+          });
+        }
+      });
+
+      // Add microtransaction records
+      allMicrotransactions.forEach(m => {
+        const isOverdue = m.status === 'PENDING' && new Date(m.createdAt) < thirtyDaysAgo;
+        invoices.push({
+          id: `TXN-${m.id.toString().padStart(6, '0')}`,
+          transactionId: m.id.toString(),
+          agencyName: m.agency?.name || m.user?.name || 'N/A',
+          agencyId: m.agency?.id?.toString() || m.userId?.toString() || null,
+          plan: m.agency?.plan || 'N/A',
+          type: m.type,
+          description: m.description,
+          amount: Number(m.amount || 0),
+          issueDate: m.createdAt,
+          dueDate: null,
+          status: m.status === 'PAID' ? 'paid' : (isOverdue ? 'overdue' : 'pending'),
+          paymentDate: m.paidAt,
+          asaasPaymentId: m.asaasPaymentId,
+        });
+      });
+
+      // Sort invoices by date (most recent first)
+      invoices.sort((a, b) => {
+        const dateA = new Date(a.paymentDate || a.issueDate).getTime();
+        const dateB = new Date(b.paymentDate || b.issueDate).getTime();
+        return dateB - dateA;
+      });
+
+      const paidInvoices = invoices.filter(i => i.status === 'paid');
+      const pendingInvoices = invoices.filter(i => i.status === 'pending');
+      const overdueInvoices = invoices.filter(i => i.status === 'overdue');
+
+      return {
+        stats: {
+          totalRevenue: totalAgencyRevenue + microRevenue,
+          thisMonth: thisMonthAgencyRevenue + thisMonthMicroRevenue,
+          pending: pendingAmount,
+          overdue: overdueAmount,
+          paid: totalAgencyRevenue + microRevenue,
+          currentMonth: currentMonthName,
+        },
+        invoices,
+        summary: {
+          totalTransactions: invoices.length,
+          paidCount: paidInvoices.length,
+          pendingCount: pendingInvoices.length,
+          overdueCount: overdueInvoices.length,
+        },
+        agencies: {
+          total: agencies.length,
+          withPayments: agencies.filter(a => a.lastPaymentAt).length,
+        },
+      };
+    } catch (error: any) {
+      console.error('Error in getBillingData:', error);
+      throw error;
+    }
+  }
+
   async getPlatformRevenue() {
     try {
       const now = new Date();

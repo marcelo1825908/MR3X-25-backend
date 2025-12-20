@@ -28,7 +28,7 @@ export class TenantAnalysisService {
     return `MR3X-PSQ-${year}-${random}`;
   }
 
-  async analyzeTenant(dto: AnalyzeTenantDto, userId: bigint, agencyId?: bigint) {
+  async analyzeTenant(dto: AnalyzeTenantDto, userId: bigint, agencyId?: bigint, userRole?: string) {
     const { document, analysisType = AnalysisType.FULL, name, lgpdAccepted, forceRefresh = false } = dto;
     const documentType = document.length === 11 ? 'CPF' : 'CNPJ';
 
@@ -41,7 +41,7 @@ export class TenantAnalysisService {
     this.logger.log(`Starting ${analysisType} analysis for document: ${this.maskDocument(document)}${forceRefresh ? ' (forced refresh)' : ''}`);
 
     if (!forceRefresh) {
-      const existingAnalysis = await this.findRecentAnalysis(document);
+      const existingAnalysis = await this.findRecentAnalysis(document, userId, agencyId, userRole);
       if (existingAnalysis) {
         this.logger.log(`Found recent valid analysis for document: ${this.maskDocument(document)}`);
         return this.formatAnalysisResponse(existingAnalysis);
@@ -477,13 +477,30 @@ export class TenantAnalysisService {
     };
   }
 
-  private async findRecentAnalysis(document: string) {
+  private async findRecentAnalysis(document: string, userId?: bigint, agencyId?: bigint, userRole?: string) {
+    const where: any = {
+      document,
+      status: TenantAnalysisStatus.COMPLETED,
+      validUntil: { gt: new Date() },
+    };
+
+    // Filter analyses based on user context to ensure proper data isolation
+    if (userRole && ['INDEPENDENT_OWNER', 'PROPRIETARIO'].includes(userRole)) {
+      // INDEPENDENT_OWNER should only see their own analyses
+      where.requestedById = userId;
+    } else if (userRole && ['AGENCY_ADMIN', 'AGENCY_MANAGER', 'BROKER'].includes(userRole)) {
+      // Agency users can see analyses from their agency
+      if (agencyId) {
+        where.agencyId = agencyId;
+      }
+    } else if (userRole === 'ADMIN') {
+      // ADMIN sees analyses without agency (platform-level)
+      where.agencyId = null;
+    }
+    // CEO and other roles get no cached results (force fresh analysis)
+
     const analysis = await this.prisma.tenantAnalysis.findFirst({
-      where: {
-        document,
-        status: TenantAnalysisStatus.COMPLETED,
-        validUntil: { gt: new Date() },
-      },
+      where,
       orderBy: { analyzedAt: 'desc' },
       include: {
         requestedBy: {

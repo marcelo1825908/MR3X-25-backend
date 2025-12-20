@@ -2931,7 +2931,7 @@ Data: [DATA_ASS_LOCATARIO]
 };
 
 const contratoLocacaoResidencial: ContractTemplate = {
-  id: "contrato-locacao-residencial-padrao-2019",
+  id: "contrato-locacao-residencial-padrao",
   name: "Locação Residencial - Locador PF / Locatário PF",
   description: "Contrato de locação residencial padrão entre Locador Pessoa Física e Locatário Pessoa Física, com opção de fiador",
   type: "CTR",

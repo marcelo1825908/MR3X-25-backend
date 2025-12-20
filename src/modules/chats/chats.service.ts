@@ -485,21 +485,29 @@ export class ChatsService {
     }
 
     if (role === 'PROPRIETARIO' || role === 'INDEPENDENT_OWNER') {
+      // Get all tenants registered by this owner (not just those with contracts)
+      const ownerTenants = await this.prisma.user.findMany({
+        where: {
+          ownerId: userIdBigInt,
+          role: 'INQUILINO',
+          status: 'ACTIVE',
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      });
+
+      // Also get agency users from contracts (if any contracts exist with agencies)
       const ownerContracts = await this.prisma.contract.findMany({
         where: {
           ownerId: userIdBigInt,
           deleted: false,
         },
         select: {
-          tenantUser: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              phone: true,
-              role: true,
-            },
-          },
           agency: {
             select: {
               users: {
@@ -520,14 +528,10 @@ export class ChatsService {
         },
       });
 
-      const tenants = ownerContracts
-        .filter(c => c.tenantUser)
-        .map(c => c.tenantUser);
-
       const agencyUsers = ownerContracts
         .flatMap(c => c.agency?.users || []);
 
-      const allUsers = [...tenants, ...agencyUsers];
+      const allUsers = [...ownerTenants, ...agencyUsers];
       const uniqueUsers = allUsers.filter((user, index, self) =>
         index === self.findIndex(u => u?.id?.toString() === user?.id?.toString())
       );

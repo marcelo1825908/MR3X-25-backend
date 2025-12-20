@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../config/prisma.service';
+import { AsaasService } from '../asaas/asaas.service';
 import {
   DEFAULT_PLANS,
   Plan,
@@ -30,6 +31,11 @@ export interface PlanUpdateDTO {
   features?: string[];
   description?: string;
   isActive?: boolean;
+  // Free usage limits
+  freeInspections?: number;
+  freeSearches?: number;
+  freeSettlements?: number;
+  freeApiCalls?: number;
 }
 
 export interface PlanModificationRequestDTO {
@@ -88,7 +94,12 @@ export interface ApiAddOnDTO {
 
 @Injectable()
 export class PlansService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(PlansService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private asaasService: AsaasService,
+  ) {}
 
   private getPlansWithUpdates(): Plan[] {
     const now = new Date();
@@ -155,29 +166,31 @@ export class PlansService {
     });
 
     const plans = this.getPlansWithUpdates();
+    const updates = getPlanUpdates();
     return plans.map(plan => {
       // Get the full config to access free usage limits and all role limits
       const planConfig = PLANS_CONFIG[plan.name];
+      const planUpdate = updates.get(plan.name);
       return {
         ...plan,
         subscribers: planCounts.get(plan.name) || 0,
         features: Array.isArray(plan.features) ? plan.features : [],
         createdAt: plan.createdAt.toISOString(),
         updatedAt: plan.updatedAt.toISOString(),
-        // Include free usage limits
-        freeInspections: planConfig?.freeInspections ?? 0,
-        freeSearches: planConfig?.freeSearches ?? 0,
-        freeSettlements: planConfig?.freeSettlements ?? 0,
-        freeApiCalls: planConfig?.freeApiCalls ?? 0,
-        // Include all role-based limits
-        maxTenants: planConfig?.maxTenants ?? 1,        // Inquilinos
-        tenantLimit: planConfig?.maxTenants ?? 1,
-        maxOwners: planConfig?.maxOwners ?? 1,          // Proprietários
-        ownerLimit: planConfig?.maxOwners ?? 1,
-        maxBrokers: planConfig?.maxBrokers ?? 1,        // Corretores
-        brokerLimit: planConfig?.maxBrokers ?? 1,
-        maxManagers: planConfig?.maxManagers ?? 1,      // Gerentes
-        managerLimit: planConfig?.maxManagers ?? 1,
+        // Include free usage limits (check updates first, then config default)
+        freeInspections: planUpdate?.freeInspections ?? planConfig?.freeInspections ?? 0,
+        freeSearches: planUpdate?.freeSearches ?? planConfig?.freeSearches ?? 0,
+        freeSettlements: planUpdate?.freeSettlements ?? planConfig?.freeSettlements ?? 0,
+        freeApiCalls: planUpdate?.freeApiCalls ?? planConfig?.freeApiCalls ?? 0,
+        // Include all role-based limits (check updates first, then config default)
+        maxTenants: planUpdate?.maxTenants ?? planConfig?.maxTenants ?? 1,        // Inquilinos
+        tenantLimit: planUpdate?.maxTenants ?? planConfig?.maxTenants ?? 1,
+        maxOwners: planUpdate?.maxOwners ?? planConfig?.maxOwners ?? 1,          // Proprietários
+        ownerLimit: planUpdate?.maxOwners ?? planConfig?.maxOwners ?? 1,
+        maxBrokers: planUpdate?.maxBrokers ?? planConfig?.maxBrokers ?? 1,        // Corretores
+        brokerLimit: planUpdate?.maxBrokers ?? planConfig?.maxBrokers ?? 1,
+        maxManagers: planUpdate?.maxManagers ?? planConfig?.maxManagers ?? 1,      // Gerentes
+        managerLimit: planUpdate?.maxManagers ?? planConfig?.maxManagers ?? 1,
       };
     });
   }
@@ -475,7 +488,8 @@ export class PlansService {
     const planName = user.plan || 'FREE';
     const planConfig = getPlanConfigByName(planName) || PLANS_CONFIG.FREE;
 
-    const userCount = await this.prisma.user.count({
+    // Count only INQUILINO (tenants) for tenant limit check
+    const tenantCount = await this.prisma.user.count({
       where: {
         OR: [
           { ownerId: BigInt(userId) },
@@ -483,26 +497,25 @@ export class PlansService {
         ],
         status: 'ACTIVE',
         isFrozen: false,
-        role: {
-          in: [UserRole.INQUILINO, UserRole.BUILDING_MANAGER],
-        },
+        role: UserRole.INQUILINO,
       },
     });
 
-    const limit = planConfig.maxInternalUsers === -1 ? 9999 : planConfig.maxInternalUsers;
+    // Use maxTenants for tenant-specific limit
+    const limit = planConfig.maxTenants === -1 ? 9999 : planConfig.maxTenants;
 
     if (limit >= 9999) {
-      return { allowed: true, current: userCount, limit: 9999 };
+      return { allowed: true, current: tenantCount, limit: 9999 };
     }
 
-    if (userCount < limit) {
-      return { allowed: true, current: userCount, limit };
+    if (tenantCount < limit) {
+      return { allowed: true, current: tenantCount, limit };
     }
 
     return {
       allowed: false,
-      message: `Você atingiu o limite de ${limit} usuário(s) do plano ${planConfig.displayName}. Faça upgrade para adicionar mais usuários.`,
-      current: userCount,
+      message: `Você atingiu o limite de ${limit} inquilino(s) do plano ${planConfig.displayName}. Faça upgrade para adicionar mais inquilinos.`,
+      current: tenantCount,
       limit,
     };
   }
@@ -719,6 +732,11 @@ export class PlansService {
         maxInternalUsers: data.userLimit,
         features: data.features,
         description: data.description,
+        // Free usage limits
+        freeInspections: data.freeInspections,
+        freeSearches: data.freeSearches,
+        freeSettlements: data.freeSettlements,
+        freeApiCalls: data.freeApiCalls,
       };
       setPlanUpdate(plan.name, updateData);
       return this.getPlanByName(plan.name);
@@ -751,6 +769,11 @@ export class PlansService {
         maxInternalUsers: data.userLimit,
         features: data.features,
         description: data.description,
+        // Free usage limits
+        freeInspections: data.freeInspections,
+        freeSearches: data.freeSearches,
+        freeSettlements: data.freeSettlements,
+        freeApiCalls: data.freeApiCalls,
       };
       setPlanUpdate(name, updateData);
       return this.getPlanByName(name);
@@ -1261,5 +1284,424 @@ export class PlansService {
       updated: planCounts.size,
       counts: Object.fromEntries(planCounts),
     };
+  }
+
+  // ==================== INDEPENDENT OWNER PLAN MANAGEMENT ====================
+
+  async getOwnerPlanUsage(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: BigInt(userId) },
+      select: { id: true, plan: true, role: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    const planName = user.plan || 'FREE';
+    const planConfig = PLANS_CONFIG[planName];
+
+    // Count properties owned by this user
+    const propertyCount = await this.prisma.property.count({
+      where: { ownerId: BigInt(userId), deleted: false, isFrozen: false },
+    });
+
+    const frozenPropertyCount = await this.prisma.property.count({
+      where: { ownerId: BigInt(userId), deleted: false, isFrozen: true },
+    });
+
+    // Count tenants in contracts where user is the owner
+    const properties = await this.prisma.property.findMany({
+      where: { ownerId: BigInt(userId), deleted: false },
+      select: { id: true },
+    });
+    const propertyIds = properties.map(p => p.id);
+
+    const tenantCount = await this.prisma.contract.count({
+      where: { propertyId: { in: propertyIds }, status: 'ACTIVE' },
+    });
+
+    return {
+      contracts: {
+        active: propertyCount,
+        frozen: frozenPropertyCount,
+        limit: planConfig?.maxProperties || 1,
+      },
+      users: {
+        active: tenantCount,
+        frozen: 0,
+        limit: planConfig?.maxTenants || 2,
+      },
+      plan: planName,
+      upgradeRequired: frozenPropertyCount > 0,
+    };
+  }
+
+  async previewOwnerPlanChange(userId: string, newPlan: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: BigInt(userId) },
+      select: { id: true, plan: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    const currentPlanName = user.plan || 'FREE';
+    const currentPlanConfig = PLANS_CONFIG[currentPlanName];
+    const newPlanConfig = PLANS_CONFIG[newPlan];
+
+    if (!newPlanConfig) {
+      throw new BadRequestException(`Plano inválido: ${newPlan}`);
+    }
+
+    // Get current usage
+    const usage = await this.getOwnerPlanUsage(userId);
+
+    const currentLimits = {
+      properties: currentPlanConfig?.maxProperties || 1,
+      users: currentPlanConfig?.maxTenants || 2,
+    };
+
+    const newLimits = {
+      properties: newPlanConfig.maxProperties,
+      users: newPlanConfig.maxTenants,
+    };
+
+    const currentUsage = {
+      properties: usage.contracts.active,
+      users: usage.users.active,
+    };
+
+    const willFreeze = {
+      properties: Math.max(0, currentUsage.properties - newLimits.properties),
+      users: Math.max(0, currentUsage.users - newLimits.users),
+    };
+
+    const willUnfreeze = {
+      properties: Math.min(usage.contracts.frozen, Math.max(0, newLimits.properties - currentUsage.properties)),
+      users: 0,
+    };
+
+    const isUpgrade = newPlanConfig.price > (currentPlanConfig?.price || 0);
+
+    return {
+      currentPlan: currentPlanName,
+      newPlan,
+      currentLimits,
+      newLimits,
+      currentUsage,
+      willFreeze,
+      willUnfreeze,
+      isUpgrade,
+    };
+  }
+
+  async changeOwnerPlan(userId: string, newPlan: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: BigInt(userId) },
+      select: { id: true, plan: true, name: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    const newPlanConfig = PLANS_CONFIG[newPlan];
+    if (!newPlanConfig) {
+      throw new BadRequestException(`Plano inválido: ${newPlan}`);
+    }
+
+    // Get current usage
+    const usage = await this.getOwnerPlanUsage(userId);
+
+    // Freeze excess properties if downgrading
+    if (usage.contracts.active > newPlanConfig.maxProperties) {
+      const propertiesToFreeze = usage.contracts.active - newPlanConfig.maxProperties;
+
+      const properties = await this.prisma.property.findMany({
+        where: { ownerId: BigInt(userId), deleted: false, isFrozen: false },
+        orderBy: { createdAt: 'desc' },
+        take: propertiesToFreeze,
+        select: { id: true },
+      });
+
+      for (const prop of properties) {
+        await this.prisma.property.update({
+          where: { id: prop.id },
+          data: { isFrozen: true, frozenAt: new Date() },
+        });
+      }
+    }
+
+    // Unfreeze properties if upgrading and there's room
+    if (usage.contracts.frozen > 0 && usage.contracts.active < newPlanConfig.maxProperties) {
+      const canUnfreeze = Math.min(
+        usage.contracts.frozen,
+        newPlanConfig.maxProperties - usage.contracts.active
+      );
+
+      const frozenProperties = await this.prisma.property.findMany({
+        where: { ownerId: BigInt(userId), deleted: false, isFrozen: true },
+        orderBy: { frozenAt: 'asc' },
+        take: canUnfreeze,
+        select: { id: true },
+      });
+
+      for (const prop of frozenProperties) {
+        await this.prisma.property.update({
+          where: { id: prop.id },
+          data: { isFrozen: false, frozenAt: null },
+        });
+      }
+    }
+
+    // Update user plan
+    await this.prisma.user.update({
+      where: { id: BigInt(userId) },
+      data: { plan: newPlan },
+    });
+
+    return {
+      success: true,
+      message: `Plano alterado para ${newPlanConfig.displayName} com sucesso`,
+      plan: newPlan,
+    };
+  }
+
+  async createOwnerPlanPayment(userId: string, newPlan: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: BigInt(userId) },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        document: true,
+        phone: true,
+        plan: true,
+        address: true,
+        city: true,
+        state: true,
+        cep: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    const currentPlan = user.plan || 'FREE';
+    const newPlanConfig = PLANS_CONFIG[newPlan];
+    const currentPlanConfig = PLANS_CONFIG[currentPlan];
+
+    if (!newPlanConfig) {
+      throw new BadRequestException(`Plano inválido: ${newPlan}`);
+    }
+
+    // For FREE plan, no payment needed
+    if (newPlan === 'FREE') {
+      return {
+        requiresPayment: false,
+        message: 'Downgrade para plano gratuito não requer pagamento',
+      };
+    }
+
+    // For downgrade to a cheaper paid plan (but not FREE), no payment needed
+    if (newPlanConfig.price <= (currentPlanConfig?.price || 0) && newPlan !== 'FREE') {
+      return {
+        requiresPayment: false,
+        message: 'Downgrade não requer pagamento',
+      };
+    }
+
+    // Check if Asaas is configured
+    if (!this.asaasService.isEnabled()) {
+      throw new BadRequestException('Sistema de pagamento não está configurado');
+    }
+
+    // Sync or create customer in Asaas
+    this.logger.log(`Syncing customer for owner ${userId}: ${user.name}, ${user.document}, ${user.email}`);
+    const customerResult = await this.asaasService.syncCustomer({
+      id: userId,
+      name: user.name || 'Proprietário',
+      email: user.email,
+      document: user.document || '',
+      phone: user.phone || undefined,
+      address: user.address || undefined,
+      city: user.city || undefined,
+      state: user.state || undefined,
+      postalCode: user.cep || undefined,
+    });
+
+    if (!customerResult.success || !customerResult.customerId) {
+      this.logger.error(`Failed to sync customer: ${customerResult.error}`);
+      throw new BadRequestException(`Erro ao sincronizar cliente: ${customerResult.error || 'erro desconhecido'}`);
+    }
+
+    // Calculate payment value (new plan price)
+    const paymentValue = newPlanConfig.price;
+
+    // Create payment in Asaas
+    const dueDate = this.asaasService.calculateDueDate(3); // 3 days from now
+    const externalReference = `owner_plan_change_${userId}_${newPlan}`;
+    const description = `Upgrade para plano ${newPlanConfig.displayName} - ${user.name || 'Proprietário'}`;
+
+    this.logger.log(`Creating payment for owner ${userId}: value=${paymentValue}, dueDate=${dueDate}, customerId=${customerResult.customerId}`);
+
+    const paymentResult = await this.asaasService.createCompletePayment({
+      customerId: customerResult.customerId,
+      value: paymentValue,
+      dueDate,
+      description,
+      externalReference,
+      billingType: 'UNDEFINED', // Let user choose PIX or Boleto
+    });
+
+    if (!paymentResult.success || !paymentResult.paymentId) {
+      this.logger.error(`Failed to create payment: ${paymentResult.error}`);
+      throw new BadRequestException(`Erro ao criar cobrança: ${paymentResult.error || 'erro desconhecido'}`);
+    }
+
+    this.logger.log(`Plan change payment created for owner ${userId}: ${paymentResult.paymentId}`);
+
+    return {
+      requiresPayment: true,
+      paymentId: paymentResult.paymentId,
+      invoiceUrl: paymentResult.invoiceUrl,
+      bankSlipUrl: paymentResult.bankSlipUrl,
+      pixQrCode: paymentResult.pixQrCode,
+      pixCopyPaste: paymentResult.pixCopyPaste,
+      value: paymentValue,
+      dueDate,
+      currentPlan: currentPlanConfig?.displayName || 'Gratuito',
+      newPlan: newPlanConfig.displayName,
+      message: `Pagamento de R$ ${paymentValue.toFixed(2)} necessário para ativar o plano ${newPlanConfig.displayName}`,
+    };
+  }
+
+  async confirmOwnerPlanPayment(userId: string, paymentId: string, newPlan: string) {
+    this.logger.log(`Manually confirming plan payment for owner ${userId}: paymentId=${paymentId}, newPlan=${newPlan}`);
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: BigInt(userId) },
+      select: { id: true, name: true, plan: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    // Check payment status in Asaas - ONLY upgrade if payment is actually PAID
+    let paymentConfirmed = false;
+    try {
+      const payment = await this.asaasService.getPayment(paymentId);
+      this.logger.log(`Payment ${paymentId} status in Asaas: ${payment?.status}`);
+
+      if (payment) {
+        const paidStatuses = ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH', 'BILLING_RECEIVED'];
+        if (paidStatuses.includes(payment.status)) {
+          paymentConfirmed = true;
+          this.logger.log(`Payment ${paymentId} confirmed with status: ${payment.status}`);
+        } else if (payment.status === 'PENDING') {
+          this.logger.log(`Payment ${paymentId} is still PENDING - not paid yet`);
+          paymentConfirmed = false;
+        } else {
+          this.logger.warn(`Payment ${paymentId} has status: ${payment.status} - cannot upgrade`);
+          paymentConfirmed = false;
+        }
+      } else {
+        this.logger.warn(`Payment ${paymentId} not found in Asaas`);
+        paymentConfirmed = false;
+      }
+    } catch (asaasError) {
+      this.logger.error(`Error checking payment in Asaas: ${asaasError.message}`);
+      throw new BadRequestException('Erro ao verificar pagamento. Tente novamente.');
+    }
+
+    if (!paymentConfirmed) {
+      throw new BadRequestException('Pagamento ainda não confirmado. Por favor, realize o pagamento e tente novamente.');
+    }
+
+    // Apply the plan change
+    const result = await this.changeOwnerPlan(userId, newPlan);
+
+    return {
+      success: true,
+      message: result.message,
+    };
+  }
+
+  async getOwnerFrozenEntities(userId: string) {
+    const frozenProperties = await this.prisma.property.findMany({
+      where: { ownerId: BigInt(userId), deleted: false, isFrozen: true },
+      select: {
+        id: true,
+        name: true,
+        address: true,
+        frozenAt: true,
+      },
+    });
+
+    // Get frozen tenants for this owner (tenants are users with role INQUILINO and ownerId)
+    const frozenTenants = await this.prisma.user.findMany({
+      where: { ownerId: BigInt(userId), isFrozen: true, role: 'INQUILINO' },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        frozenAt: true,
+      },
+    });
+
+    return {
+      properties: frozenProperties.map(p => ({
+        id: p.id.toString(),
+        name: p.name,
+        address: p.address,
+        frozenAt: p.frozenAt,
+      })),
+      tenants: frozenTenants.map(t => ({
+        id: t.id.toString(),
+        name: t.name,
+        email: t.email,
+        frozenAt: t.frozenAt,
+      })),
+    };
+  }
+
+  async checkOwnerPropertyCreationAllowed(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: BigInt(userId) },
+      select: { id: true, plan: true, role: true },
+    });
+
+    if (!user) {
+      return { allowed: false, message: 'Usuário não encontrado' };
+    }
+
+    if (user.role !== 'INDEPENDENT_OWNER') {
+      return { allowed: false, message: 'Usuário não é um proprietário independente' };
+    }
+
+    const planConfig = getPlanConfigByName(user.plan) || PLANS_CONFIG.FREE;
+
+    const propertyCount = await this.prisma.property.count({
+      where: {
+        ownerId: BigInt(userId),
+        deleted: false,
+        isFrozen: false,
+      },
+    });
+
+    if (propertyCount >= planConfig.maxProperties) {
+      return {
+        allowed: false,
+        message: `Você atingiu o limite de ${planConfig.maxProperties} imóvel(is) do seu plano ${planConfig.displayName}. Faça upgrade para adicionar mais.`,
+        current: propertyCount,
+        limit: planConfig.maxProperties,
+      };
+    }
+
+    return { allowed: true };
   }
 }

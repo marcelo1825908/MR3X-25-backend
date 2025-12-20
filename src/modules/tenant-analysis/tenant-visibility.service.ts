@@ -76,46 +76,13 @@ export class TenantVisibilityService {
       return formattedAnalysis;
     }
 
-    // 4) Owner roles: see data with masked document but full basic data
+    // 4) Owner roles: full visibility (they requested and paid for the analysis)
     if (
       role === UserRole.INDEPENDENT_OWNER ||
       role === UserRole.PROPRIETARIO
     ) {
-      const masked = { ...formattedAnalysis };
-
-      // Mask core document identifier for privacy
-      masked.document = this.maskDocument(formattedAnalysis.document);
-
-      // basicData: show all fields including address, birthDate, phone (masked)
-      if (formattedAnalysis.basicData?.type === 'CPF') {
-        masked.basicData = {
-          type: 'CPF',
-          name: formattedAnalysis.basicData.name,
-          status: formattedAnalysis.basicData.status,
-          address: formattedAnalysis.basicData.address,
-          city: formattedAnalysis.basicData.city,
-          state: formattedAnalysis.basicData.state,
-          zipCode: formattedAnalysis.basicData.zipCode,
-          phone: this.maskPhone(formattedAnalysis.basicData.phone),
-          birthDate: formattedAnalysis.basicData.birthDate,
-          motherName: undefined, // Keep mother name hidden for extra privacy
-        };
-      } else if (formattedAnalysis.basicData?.type === 'CNPJ') {
-        masked.basicData = {
-          type: 'CNPJ',
-          companyName: formattedAnalysis.basicData.companyName,
-          tradingName: formattedAnalysis.basicData.tradingName,
-          status: formattedAnalysis.basicData.status,
-          address: formattedAnalysis.basicData.address,
-          city: formattedAnalysis.basicData.city,
-          state: formattedAnalysis.basicData.state,
-          zipCode: formattedAnalysis.basicData.zipCode,
-          phone: this.maskPhone(formattedAnalysis.basicData.phone),
-          openingDate: formattedAnalysis.basicData.openingDate,
-        };
-      }
-
-      return masked;
+      // Independent owners who request analysis need full data for rental decisions
+      return formattedAnalysis;
     }
 
     // 4) Other / third parties: extremely summarized view

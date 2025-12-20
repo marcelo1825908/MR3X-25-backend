@@ -80,6 +80,18 @@ export class DashboardController {
     return this.dashboardService.getTenantAlerts(userId);
   }
 
+  @Get('billing')
+  @ApiOperation({ summary: 'Get billing data (invoices and stats) for CEO' })
+  async getBillingData(@Req() req: any) {
+    const role = req.user.role;
+
+    if (role !== 'CEO') {
+      return { error: 'Acesso negado. Apenas CEO pode visualizar dados de faturamento.' };
+    }
+
+    return this.dashboardService.getBillingData();
+  }
+
   @Post('extrajudicial/:notificationId/acknowledge')
   @ApiOperation({ summary: 'Record tenant acknowledgment of extrajudicial notification' })
   async acknowledgeExtrajudicial(

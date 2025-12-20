@@ -77,7 +77,7 @@ export class TenantAnalysisController {
 
       const userId = BigInt(user.sub);
       const agencyId = user.agencyId ? BigInt(user.agencyId) : undefined;
-      return await this.tenantAnalysisService.analyzeTenant(dto, userId, agencyId);
+      return await this.tenantAnalysisService.analyzeTenant(dto, userId, agencyId, user.role);
     } catch (error) {
       console.error('Tenant analysis error:', error.message);
       throw new HttpException(
