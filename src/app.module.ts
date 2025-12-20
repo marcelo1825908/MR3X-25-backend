@@ -30,6 +30,9 @@ import { SalesRepModule } from './modules/sales-rep/sales-rep.module';
 import { AuditorModule } from './modules/auditor/auditor.module';
 import { PlatformManagerModule } from './modules/platform-manager/platform-manager.module';
 import { AsaasModule } from './modules/asaas/asaas.module';
+import { SplitConfigurationModule } from './modules/split-configuration/split-configuration.module';
+import { AsaasWalletModule } from './modules/asaas-wallet/asaas-wallet.module';
+import { BillingCycleModule } from './modules/billing-cycle/billing-cycle.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -68,6 +71,9 @@ import { HealthController } from './health.controller';
     AuditorModule,
     PlatformManagerModule,
     AsaasModule,
+    SplitConfigurationModule,
+    AsaasWalletModule,
+    BillingCycleModule,
   ],
   controllers: [HealthController],
 })

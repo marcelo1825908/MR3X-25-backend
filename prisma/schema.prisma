@@ -1889,3 +1889,423 @@ model WebhookLog {
   @@index([createdAt])
   @@map("webhook_logs")
 }
+
+// ============================================
+// SPLIT CONFIGURATION SYSTEM (Asaas Integration)
+// ============================================
+
+enum SplitConfigurationStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum SplitRuleType {
+  PERCENTAGE
+  FIXED
+}
+
+enum ReceiverType {
+  PLATFORM
+  AGENCY
+  OWNER
+}
+
+enum ChargeType {
+  RENT
+  OVERUSE
+  OPERATIONAL_FEE
+  DEPOSIT
+  PENALTY
+}
+
+// Main split configuration for an entity (agency or independent owner)
+model SplitConfiguration {
+  id       BigInt  @id @default(autoincrement()) @db.UnsignedBigInt
+  token    String? @unique @db.VarChar(50)
+
+  // Entity owner of this configuration
+  agencyId BigInt? @map("agency_id") @db.UnsignedBigInt
+  ownerId  BigInt? @map("owner_id") @db.UnsignedBigInt // For independent owners
+
+  name        String  @db.VarChar(100)
+  description String? @db.VarChar(500)
+
+  // Scope: PER_CONTRACT, PER_PROPERTY, GLOBAL
+  scope       String  @default("GLOBAL") @db.VarChar(30)
+
+  // Contract/property reference for specific scopes
+  contractId BigInt? @map("contract_id") @db.UnsignedBigInt
+  propertyId BigInt? @map("property_id") @db.UnsignedBigInt
+
+  // Status and versioning
+  status         SplitConfigurationStatus @default(DRAFT)
+  version        Int                      @default(1)
+  effectiveDate  DateTime?                @map("effective_date") @db.Date
+
+  // Validation state
+  isValidated    Boolean   @default(false) @map("is_validated")
+  validatedAt    DateTime? @map("validated_at") @db.Timestamp(0)
+  validatedBy    BigInt?   @map("validated_by") @db.UnsignedBigInt
+  validationNotes String?  @map("validation_notes") @db.Text
+
+  // Activation/deactivation
+  activatedAt   DateTime? @map("activated_at") @db.Timestamp(0)
+  activatedBy   BigInt?   @map("activated_by") @db.UnsignedBigInt
+  deactivatedAt DateTime? @map("deactivated_at") @db.Timestamp(0)
+  deactivatedBy BigInt?   @map("deactivated_by") @db.UnsignedBigInt
+
+  // Change control
+  changeReason String? @map("change_reason") @db.VarChar(255)
+  notes        String? @db.Text
+
+  createdBy BigInt   @map("created_by") @db.UnsignedBigInt
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  // Relations
+  rules      SplitRule[]
+  receivers  SplitReceiver[]
+  auditLogs  SplitAuditLog[]
+
+  @@index([agencyId])
+  @@index([ownerId])
+  @@index([contractId])
+  @@index([propertyId])
+  @@index([status])
+  @@index([scope])
+  @@map("split_configurations")
+}
+
+// Individual split rules within a configuration
+model SplitRule {
+  id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+
+  configurationId BigInt @map("configuration_id") @db.UnsignedBigInt
+  receiverId      BigInt @map("receiver_id") @db.UnsignedBigInt
+
+  // Rule type and value
+  ruleType SplitRuleType
+  value    Decimal       @db.Decimal(10, 4) // Percentage (0-100) or fixed value
+
+  // Constraints
+  minimumAmount Decimal? @map("minimum_amount") @db.Decimal(12, 2)
+  maximumAmount Decimal? @map("maximum_amount") @db.Decimal(12, 2)
+
+  // Charge type filter (null = applies to all)
+  chargeType ChargeType?
+
+  // Order of application
+  priority Int @default(0)
+
+  // Status
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  configuration SplitConfiguration @relation(fields: [configurationId], references: [id], onDelete: Cascade)
+  receiver      SplitReceiver      @relation(fields: [receiverId], references: [id])
+
+  @@index([configurationId])
+  @@index([receiverId])
+  @@index([chargeType])
+  @@map("split_rules")
+}
+
+// Receivers in a split configuration (platform, agency, owner)
+model SplitReceiver {
+  id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+
+  configurationId BigInt @map("configuration_id") @db.UnsignedBigInt
+
+  // Receiver identification
+  receiverType ReceiverType
+  name         String       @db.VarChar(255)
+  document     String?      @db.VarChar(30)  // CPF/CNPJ
+
+  // Entity references
+  userId   BigInt? @map("user_id") @db.UnsignedBigInt   // For owner receivers
+  agencyId BigInt? @map("agency_id") @db.UnsignedBigInt // For agency receivers
+
+  // Asaas wallet linkage
+  walletId BigInt? @map("wallet_id") @db.UnsignedBigInt
+
+  // Lock platform receiver (cannot be edited by clients)
+  isLocked Boolean @default(false) @map("is_locked")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  configuration SplitConfiguration @relation(fields: [configurationId], references: [id], onDelete: Cascade)
+  wallet        AsaasWallet?       @relation(fields: [walletId], references: [id])
+  rules         SplitRule[]
+
+  @@index([configurationId])
+  @@index([receiverType])
+  @@index([userId])
+  @@index([agencyId])
+  @@map("split_receivers")
+}
+
+// Asaas wallet accounts linked to the system
+model AsaasWallet {
+  id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+
+  // Asaas account information
+  asaasAccountId   String  @unique @map("asaas_account_id") @db.VarChar(100)
+  asaasWalletId    String  @unique @map("asaas_wallet_id") @db.VarChar(100)
+
+  // Owner information
+  ownerName        String  @map("owner_name") @db.VarChar(255)
+  ownerDocument    String  @map("owner_document") @db.VarChar(30)
+  ownerEmail       String? @map("owner_email") @db.VarChar(191)
+  ownerPhone       String? @map("owner_phone") @db.VarChar(30)
+
+  // Linked entity
+  agencyId BigInt? @map("agency_id") @db.UnsignedBigInt
+  userId   BigInt? @map("user_id") @db.UnsignedBigInt
+
+  // Verification status
+  isVerified     Boolean   @default(false) @map("is_verified")
+  verifiedAt     DateTime? @map("verified_at") @db.Timestamp(0)
+  verifiedBy     BigInt?   @map("verified_by") @db.UnsignedBigInt
+  verificationMethod String? @map("verification_method") @db.VarChar(50)
+
+  // Bank account information (from Asaas)
+  bankCode      String? @map("bank_code") @db.VarChar(10)
+  bankName      String? @map("bank_name") @db.VarChar(100)
+  bankBranch    String? @map("bank_branch") @db.VarChar(20)
+  bankAccount   String? @map("bank_account") @db.VarChar(30)
+  bankAccountType String? @map("bank_account_type") @db.VarChar(20)
+  pixKey        String? @map("pix_key") @db.VarChar(100)
+
+  // Status
+  status        String   @default("ACTIVE") @db.VarChar(20)
+  lastSyncedAt  DateTime? @map("last_synced_at") @db.Timestamp(0)
+  syncError     String?   @map("sync_error") @db.VarChar(500)
+
+  createdBy BigInt   @map("created_by") @db.UnsignedBigInt
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  receivers SplitReceiver[]
+
+  @@index([agencyId])
+  @@index([userId])
+  @@index([status])
+  @@map("asaas_wallets")
+}
+
+// Audit log for split configuration changes
+model SplitAuditLog {
+  id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+
+  configurationId BigInt @map("configuration_id") @db.UnsignedBigInt
+
+  // Action details
+  action      String @db.VarChar(50) // CREATE, UPDATE, ACTIVATE, DEACTIVATE, DELETE
+  entityType  String @db.VarChar(50) // CONFIGURATION, RULE, RECEIVER
+  entityId    BigInt? @map("entity_id") @db.UnsignedBigInt
+
+  // Changes
+  oldValues String? @map("old_values") @db.Text // JSON
+  newValues String? @map("new_values") @db.Text // JSON
+
+  // Change reason
+  reason String? @db.VarChar(255)
+
+  // Performer
+  performedBy BigInt   @map("performed_by") @db.UnsignedBigInt
+  performedAt DateTime @default(now()) @map("performed_at") @db.Timestamp(0)
+
+  // Request context
+  clientIP  String? @map("client_ip") @db.VarChar(45)
+  userAgent String? @map("user_agent") @db.VarChar(500)
+
+  // Immutable hash for integrity verification
+  integrityHash String? @map("integrity_hash") @db.VarChar(255)
+
+  configuration SplitConfiguration @relation(fields: [configurationId], references: [id], onDelete: Cascade)
+
+  @@index([configurationId])
+  @@index([action])
+  @@index([performedBy])
+  @@index([performedAt])
+  @@map("split_audit_logs")
+}
+
+// ============================================
+// BILLING CHARGES (Separate charge types)
+// ============================================
+
+enum BillingChargeStatus {
+  PENDING
+  PROCESSING
+  PAID
+  OVERDUE
+  CANCELED
+  REFUNDED
+  PARTIAL_REFUND
+}
+
+// Consolidated billing charges (separate from invoices for clarity)
+model BillingCharge {
+  id    BigInt  @id @default(autoincrement()) @db.UnsignedBigInt
+  token String? @unique @db.VarChar(50)
+
+  // Entity association
+  agencyId   BigInt? @map("agency_id") @db.UnsignedBigInt
+  ownerId    BigInt? @map("owner_id") @db.UnsignedBigInt
+  contractId BigInt? @map("contract_id") @db.UnsignedBigInt
+  propertyId BigInt? @map("property_id") @db.UnsignedBigInt
+  tenantId   BigInt? @map("tenant_id") @db.UnsignedBigInt
+
+  // Charge classification (RENT, OVERUSE, OPERATIONAL_FEE)
+  chargeType  ChargeType
+  description String     @db.VarChar(500)
+
+  // Billing period
+  billingMonth String @map("billing_month") @db.VarChar(7) // YYYY-MM
+
+  // Values
+  grossValue    Decimal @map("gross_value") @db.Decimal(12, 2)
+  netValue      Decimal @map("net_value") @db.Decimal(12, 2)
+  platformFee   Decimal @default(0) @map("platform_fee") @db.Decimal(12, 2)
+  gatewayFee    Decimal @default(0) @map("gateway_fee") @db.Decimal(12, 2)
+
+  // Split breakdown (JSON for flexibility)
+  splitBreakdown String? @map("split_breakdown") @db.Text
+
+  // Status
+  status  BillingChargeStatus @default(PENDING)
+  dueDate DateTime            @map("due_date") @db.Date
+
+  // Payment info (from Asaas)
+  asaasPaymentId  String? @map("asaas_payment_id") @db.VarChar(100)
+  asaasCustomerId String? @map("asaas_customer_id") @db.VarChar(100)
+  paymentLink     String? @map("payment_link") @db.VarChar(500)
+  boletoUrl       String? @map("boleto_url") @db.VarChar(500)
+  pixQrCode       String? @map("pix_qr_code") @db.Text
+  pixCopyPaste    String? @map("pix_copy_paste") @db.Text
+  barcode         String? @db.VarChar(100)
+  paymentMethod   String? @map("payment_method") @db.VarChar(50)
+
+  // Payment confirmation
+  paidValue Decimal?  @map("paid_value") @db.Decimal(12, 2)
+  paidAt    DateTime? @map("paid_at") @db.Timestamp(0)
+
+  // Refund tracking
+  refundedValue  Decimal?  @map("refunded_value") @db.Decimal(12, 2)
+  refundedAt     DateTime? @map("refunded_at") @db.Timestamp(0)
+  refundReason   String?   @map("refund_reason") @db.VarChar(255)
+
+  // Related entities
+  invoiceId BigInt? @map("invoice_id") @db.UnsignedBigInt
+  usageIds  String? @map("usage_ids") @db.Text // Comma-separated usage record IDs
+
+  // Webhook tracking
+  webhookStatus String?   @map("webhook_status") @db.VarChar(50)
+  lastWebhookAt DateTime? @map("last_webhook_at") @db.Timestamp(0)
+
+  notes     String?  @db.Text
+  createdBy BigInt?  @map("created_by") @db.UnsignedBigInt
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  @@index([agencyId])
+  @@index([ownerId])
+  @@index([contractId])
+  @@index([tenantId])
+  @@index([chargeType])
+  @@index([status])
+  @@index([billingMonth])
+  @@index([dueDate])
+  @@index([asaasPaymentId])
+  @@map("billing_charges")
+}
+
+// Monthly billing cycle tracking
+model BillingCycle {
+  id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+
+  // Entity
+  agencyId BigInt? @map("agency_id") @db.UnsignedBigInt
+  ownerId  BigInt? @map("owner_id") @db.UnsignedBigInt
+
+  // Period
+  billingMonth String @map("billing_month") @db.VarChar(7) // YYYY-MM
+
+  // Status
+  status String @default("OPEN") @db.VarChar(30) // OPEN, CLOSING, CLOSED, BILLED
+
+  // Usage summary
+  totalContracts      Int     @default(0) @map("total_contracts")
+  totalInvoicesIssued Int     @default(0) @map("total_invoices_issued")
+  totalPlatformFee    Decimal @default(0) @map("total_platform_fee") @db.Decimal(12, 2)
+  totalAgencyFee      Decimal @default(0) @map("total_agency_fee") @db.Decimal(12, 2)
+  totalOwnerPayout    Decimal @default(0) @map("total_owner_payout") @db.Decimal(12, 2)
+
+  // Overuse tracking
+  inspectionsUsed    Int     @default(0) @map("inspections_used")
+  inspectionsFree    Int     @default(0) @map("inspections_free")
+  inspectionsCharged Int     @default(0) @map("inspections_charged")
+  settlementsUsed    Int     @default(0) @map("settlements_used")
+  settlementsFree    Int     @default(0) @map("settlements_free")
+  settlementsCharged Int     @default(0) @map("settlements_charged")
+  screeningsUsed     Int     @default(0) @map("screenings_used")
+  screeningsFree     Int     @default(0) @map("screenings_free")
+  screeningsCharged  Int     @default(0) @map("screenings_charged")
+  apiCallsUsed       Int     @default(0) @map("api_calls_used")
+  apiCallsFree       Int     @default(0) @map("api_calls_free")
+  apiCallsCharged    Int     @default(0) @map("api_calls_charged")
+
+  // Overuse charge value
+  overuseChargeValue Decimal @default(0) @map("overuse_charge_value") @db.Decimal(12, 2)
+
+  // Operational fees
+  boletoCount        Int     @default(0) @map("boleto_count")
+  boletoFeeValue     Decimal @default(0) @map("boleto_fee_value") @db.Decimal(12, 2)
+  operationalCharges Decimal @default(0) @map("operational_charges") @db.Decimal(12, 2)
+
+  // Closing info
+  closedAt DateTime? @map("closed_at") @db.Timestamp(0)
+  closedBy BigInt?   @map("closed_by") @db.UnsignedBigInt
+
+  // Generated charges
+  chargeIds String? @map("charge_ids") @db.Text // JSON array of charge IDs
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  @@unique([agencyId, billingMonth])
+  @@unique([ownerId, billingMonth])
+  @@index([status])
+  @@index([billingMonth])
+  @@map("billing_cycles")
+}
+
+// Feature usage limits and pricing
+model FeatureLimit {
+  id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+
+  // Feature identification
+  featureCode String @unique @map("feature_code") @db.VarChar(50)
+  featureName String @map("feature_name") @db.VarChar(100)
+  description String? @db.VarChar(500)
+
+  // Pricing
+  unitPrice Decimal @map("unit_price") @db.Decimal(10, 2)
+
+  // Free limits by plan (JSON)
+  freeLimitsByPlan String? @map("free_limits_by_plan") @db.Text
+
+  // Status
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  @@map("feature_limits")
+}
