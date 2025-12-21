@@ -11,16 +11,62 @@ export class DashboardService {
     paymentsThisMonth: any[],
     pendingContracts: any[],
     recentPayments: any[],
+    tenantCountOverride?: number,
   ) {
     const now = new Date();
 
     const totalProperties = properties.length;
-    const occupiedProperties = properties.filter((p: any) => p.status === 'ALUGADO').length;
-    const availableProperties = properties.filter((p: any) => p.status === 'DISPONIVEL').length;
-    const maintenanceProperties = properties.filter((p: any) => p.status === 'MANUTENCAO').length;
-    const pendingUnits = properties.filter((p: any) => p.status === 'PENDENTE').length;
-    const overdueUnits = properties.filter((p: any) => p.status === 'ALUGADO' && p.nextDueDate && p.nextDueDate < now).length;
-    const onTimeUnits = properties.filter((p: any) => p.status === 'ALUGADO' && p.nextDueDate && p.nextDueDate >= now).length;
+    
+    // Calculate active contracts - consider multiple relevant statuses (Portuguese and English)
+    const activeContractsList = contracts.filter((c: any) => {
+      const status = (c.status || '').toUpperCase();
+      return status === 'ATIVO' ||
+             status === 'ACTIVE' ||
+             status === 'ASSINADO' ||
+             status === 'SIGNED' ||
+             status === 'AGUARDANDO_ASSINATURAS' ||
+             status === 'AGUARDANDO_ASSINATURA' ||
+             status === 'AWAITING_SIGNATURE' ||
+             status === 'AWAITING_SIGNATURES' ||
+             status === 'PENDENTE' ||
+             status === 'PENDING';
+    });
+    const activeContractsCount = activeContractsList.length;
+    
+    // Calculate occupied properties based on active contracts (more accurate)
+    const propertiesWithActiveContracts = new Set(
+      activeContractsList
+        .map((c: any) => c.property?.id || c.propertyId)
+        .filter((id: any) => id !== null && id !== undefined)
+    );
+    const occupiedFromContracts = propertiesWithActiveContracts.size;
+    
+    // Also consider properties marked as ALUGADO or RENTED
+    const propertiesMarkedOccupied = properties.filter((p: any) =>
+      p.status === 'ALUGADO' || p.status === 'RENTED'
+    ).length;
+
+    // Use the higher value or properties marked as occupied if no contracts
+    const occupiedProperties = Math.max(occupiedFromContracts, propertiesMarkedOccupied);
+
+    // Calculate unique tenants from active contracts (fallback)
+    const uniqueTenants = new Set(
+      activeContractsList
+        .map((c: any) => c.tenantUser?.id || c.tenantId)
+        .filter((id: any) => id !== null && id !== undefined)
+    );
+    // Use override if provided (for direct tenant count), otherwise use contract-based count
+    const tenantCount = tenantCountOverride !== undefined ? tenantCountOverride : uniqueTenants.size;
+
+    const availableProperties = properties.filter((p: any) =>
+      p.status === 'DISPONIVEL' || p.status === 'VACANT'
+    ).length;
+    const maintenanceProperties = properties.filter((p: any) =>
+      p.status === 'MANUTENCAO' || p.status === 'MAINTENANCE'
+    ).length;
+    const pendingUnits = properties.filter((p: any) => p.status === 'PENDENTE' || p.status === 'PENDING').length;
+    const overdueUnits = properties.filter((p: any) => (p.status === 'ALUGADO' || p.status === 'RENTED') && p.nextDueDate && p.nextDueDate < now).length;
+    const onTimeUnits = properties.filter((p: any) => (p.status === 'ALUGADO' || p.status === 'RENTED') && p.nextDueDate && p.nextDueDate >= now).length;
 
     const monthlyRevenue = paymentsThisMonth.reduce((sum: number, payment: any) => {
       return sum + Number(payment.valorPago || 0);
@@ -35,7 +81,8 @@ export class DashboardService {
       occupiedProperties,
       availableProperties,
       maintenanceProperties,
-      activeContracts: contracts.filter((c: any) => c.status === 'ATIVO').length,
+      activeContracts: activeContractsCount,
+      tenantCount,
       monthlyRevenue,
       pendingPayments: pendingContracts.length,
       receivedValue: monthlyRevenue,
@@ -125,15 +172,18 @@ export class DashboardService {
       }).catch(() => 0);
 
       const occupiedProperties = await this.prisma.property.count({
-        where: { deleted: false, status: 'ALUGADO' },
+        where: { deleted: false, status: { in: ['ALUGADO', 'RENTED'] } },
       }).catch(() => 0);
 
       const availableProperties = await this.prisma.property.count({
-        where: { deleted: false, status: 'DISPONIVEL' },
+        where: { deleted: false, status: { in: ['DISPONIVEL', 'VACANT'] } },
       }).catch(() => 0);
 
       const activeContracts = await this.prisma.contract.count({
-        where: { deleted: false, status: 'ATIVO' },
+        where: {
+          deleted: false,
+          status: { in: ['ATIVO', 'ACTIVE', 'ASSINADO', 'SIGNED', 'PENDENTE', 'PENDING', 'AGUARDANDO_ASSINATURA', 'AWAITING_SIGNATURE'] }
+        },
       }).catch(() => 0);
 
       const paymentsThisMonth = await this.prisma.payment.findMany({
@@ -440,7 +490,9 @@ export class DashboardService {
       ]);
 
       const pendingContracts = contracts.filter((contract: any) => {
-        if (contract.status !== 'ATIVO') return false;
+        const status = (contract.status || '').toUpperCase();
+        const isActive = status === 'ATIVO' || status === 'ACTIVE' || status === 'ASSINADO' || status === 'SIGNED';
+        if (!isActive) return false;
         if (!contract.lastPaymentDate) return true;
         return contract.lastPaymentDate < thirtyDaysAgo;
       });
@@ -560,7 +612,9 @@ export class DashboardService {
     ]);
 
     const pendingContracts = contracts.filter((contract: any) => {
-      if (contract.status !== 'ATIVO') return false;
+      const status = (contract.status || '').toUpperCase();
+      const isActive = status === 'ATIVO' || status === 'ACTIVE' || status === 'ASSINADO' || status === 'SIGNED';
+      if (!isActive) return false;
       if (!contract.lastPaymentDate) return true;
       return contract.lastPaymentDate < thirtyDaysAgo;
     });
@@ -661,7 +715,9 @@ export class DashboardService {
     ]);
 
     const pendingContracts = contracts.filter((contract: any) => {
-      if (contract.status !== 'ATIVO') return false;
+      const status = (contract.status || '').toUpperCase();
+      const isActive = status === 'ATIVO' || status === 'ACTIVE' || status === 'ASSINADO' || status === 'SIGNED';
+      if (!isActive) return false;
       if (!contract.lastPaymentDate) return true;
       return contract.lastPaymentDate < thirtyDaysAgo;
     });
@@ -863,7 +919,7 @@ export class DashboardService {
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    const [properties, contracts, paymentsThisMonth, recentPayments] = await Promise.all([
+    const [properties, contracts, paymentsThisMonth, recentPayments, tenantCount] = await Promise.all([
       this.prisma.property.findMany({
         where: {
           deleted: false,
@@ -945,15 +1001,25 @@ export class DashboardService {
           },
         },
       }),
+      // Count all tenants registered in the agency
+      this.prisma.user.count({
+        where: {
+          agencyId,
+          role: 'INQUILINO',
+          status: 'ACTIVE',
+        },
+      }),
     ]);
 
     const pendingContracts = contracts.filter((contract: any) => {
-      if (contract.status !== 'ATIVO') return false;
+      const status = (contract.status || '').toUpperCase();
+      const isActive = status === 'ATIVO' || status === 'ACTIVE' || status === 'ASSINADO' || status === 'SIGNED';
+      if (!isActive) return false;
       if (!contract.lastPaymentDate) return true;
       return contract.lastPaymentDate < thirtyDaysAgo;
     });
 
-    return this.buildDashboardResponse(properties, contracts, paymentsThisMonth, pendingContracts, recentPayments);
+    return this.buildDashboardResponse(properties, contracts, paymentsThisMonth, pendingContracts, recentPayments, tenantCount);
   }
 
   async getManagerDashboard(userId: string, userAgencyId?: string | null) {
@@ -1066,7 +1132,9 @@ export class DashboardService {
     ]);
 
     const pendingContracts = contracts.filter((contract: any) => {
-      if (contract.status !== 'ATIVO') return false;
+      const status = (contract.status || '').toUpperCase();
+      const isActive = status === 'ATIVO' || status === 'ACTIVE' || status === 'ASSINADO' || status === 'SIGNED';
+      if (!isActive) return false;
       if (!contract.lastPaymentDate) return true;
       return contract.lastPaymentDate < thirtyDaysAgo;
     });
@@ -1181,7 +1249,9 @@ export class DashboardService {
     ]);
 
     const pendingContracts = contracts.filter((contract: any) => {
-      if (contract.status !== 'ATIVO') return false;
+      const status = (contract.status || '').toUpperCase();
+      const isActive = status === 'ATIVO' || status === 'ACTIVE' || status === 'ASSINADO' || status === 'SIGNED';
+      if (!isActive) return false;
       if (!contract.lastPaymentDate) return true;
       return contract.lastPaymentDate < thirtyDaysAgo;
     });
