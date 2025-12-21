@@ -44,6 +44,10 @@ jobs:
 
             cd /var/www/html/vps/MR3X-25-backend
 
+            echo 'Resetting local changes'
+            git reset --hard HEAD
+            git clean -fd
+
             echo 'Pulling latest backend code'
             git pull
 
