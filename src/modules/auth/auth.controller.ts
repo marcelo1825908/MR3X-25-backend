@@ -6,10 +6,12 @@ import { RegisterDto, LoginDto, VerifyEmailRequestDto, VerifyEmailConfirmDto, Fo
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 // Cookie configuration
+// COOKIE_SECURE can be set to 'false' to allow cookies over HTTP (not recommended for production with sensitive data)
+const isSecure = process.env.COOKIE_SECURE === 'false' ? false : process.env.NODE_ENV === 'production';
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: process.env.NODE_ENV === 'production' ? 'strict' as const : 'lax' as const,
+  secure: isSecure,
+  sameSite: isSecure ? 'strict' as const : 'lax' as const,
   path: '/',
 };
 
