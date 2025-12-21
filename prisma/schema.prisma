@@ -193,6 +193,7 @@ model User {
   pixKey      String?  @map("pix_key") @db.VarChar(100)
 
   creci           String?   @db.VarChar(30)
+  ownerFee        Float?    @default(90.0) @map("owner_fee") // Percentage the owner receives (set by agency)
 
   legalRepresentativeId   BigInt?   @unique @map("legal_representative_id") @db.UnsignedBigInt
   status                  String    @default("ACTIVE") @db.VarChar(20)

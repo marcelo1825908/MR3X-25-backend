@@ -115,6 +115,30 @@ export class UsersController {
     return { exists: !!user };
   }
 
+  @Get('owners')
+  @Roles(UserRole.AGENCY_ADMIN)
+  @ApiOperation({ summary: 'Get owners for the agency' })
+  async getOwners(@CurrentUser() user: any) {
+    if (!user?.agencyId) {
+      return [];
+    }
+    return this.usersService.getOwnersByAgency(user.agencyId.toString());
+  }
+
+  @Patch('owners/:ownerId/fee')
+  @Roles(UserRole.AGENCY_ADMIN)
+  @ApiOperation({ summary: 'Update owner fee percentage' })
+  async updateOwnerFee(
+    @Param('ownerId') ownerId: string,
+    @Body('ownerFee') ownerFee: number,
+    @CurrentUser() user: any
+  ) {
+    if (!user?.agencyId) {
+      throw new Error('Agência não encontrada');
+    }
+    return this.usersService.updateOwnerFee(ownerId, ownerFee, user.agencyId.toString());
+  }
+
   @Get('tenants')
   @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.PROPRIETARIO, UserRole.INDEPENDENT_OWNER, UserRole.AGENCY_ADMIN, UserRole.AGENCY_MANAGER, UserRole.BROKER)
   @ApiOperation({ summary: 'Get tenants based on user scope' })

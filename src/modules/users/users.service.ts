@@ -1380,6 +1380,68 @@ export class UsersService {
     };
   }
 
+  async getOwnersByAgency(agencyId: string) {
+    const owners = await this.prisma.user.findMany({
+      where: {
+        role: UserRole.PROPRIETARIO,
+        agencyId: BigInt(agencyId),
+      },
+      select: {
+        id: true,
+        token: true,
+        email: true,
+        name: true,
+        phone: true,
+        document: true,
+        status: true,
+        ownerFee: true,
+        createdAt: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return owners.map(owner => ({
+      ...owner,
+      id: owner.id.toString(),
+      ownerFee: owner.ownerFee ?? 90.0,
+      createdAt: owner.createdAt?.toISOString() || null,
+    }));
+  }
+
+  async updateOwnerFee(ownerId: string, ownerFee: number, agencyId: string) {
+    // Verify owner belongs to this agency
+    const owner = await this.prisma.user.findFirst({
+      where: {
+        id: BigInt(ownerId),
+        role: UserRole.PROPRIETARIO,
+        agencyId: BigInt(agencyId),
+      },
+    });
+
+    if (!owner) {
+      throw new NotFoundException('Proprietário não encontrado nesta agência');
+    }
+
+    if (ownerFee < 0 || ownerFee > 100) {
+      throw new BadRequestException('Taxa do proprietário deve estar entre 0 e 100');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: BigInt(ownerId) },
+      data: { ownerFee },
+      select: {
+        id: true,
+        name: true,
+        ownerFee: true,
+      },
+    });
+
+    return {
+      ...updated,
+      id: updated.id.toString(),
+    };
+  }
+
   async deleteTenant(requestingUserId: string, tenantId: string) {
     const tenantBigInt = BigInt(tenantId);
 

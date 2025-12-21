@@ -5,6 +5,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { Request, Response, NextFunction } from 'express';
 import { join } from 'path';
+import * as cookieParser from 'cookie-parser';
 
 (BigInt.prototype as any).toJSON = function () {
   return this.toString();
@@ -12,6 +13,9 @@ import { join } from 'path';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Enable cookie parsing
+  app.use(cookieParser());
 
   // Add CORS headers for static assets (uploads)
   app.use('/uploads', (req: Request, res: Response, next: NextFunction) => {
