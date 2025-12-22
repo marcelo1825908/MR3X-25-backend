@@ -847,4 +847,86 @@ export class SalesRepService {
 
     return result;
   }
+
+  async getAgenciesSummary() {
+    const agencies = await this.prisma.agency.findMany({
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        city: true,
+        state: true,
+        status: true,
+        plan: true,
+        createdAt: true,
+        _count: {
+          select: {
+            users: true,
+            properties: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return agencies.map(agency => ({
+      id: String(agency.id),
+      name: agency.name,
+      email: agency.email,
+      phone: agency.phone || '',
+      city: agency.city || '',
+      state: agency.state || '',
+      status: agency.status,
+      plan: agency.plan,
+      userCount: agency._count.users,
+      propertyCount: agency._count.properties,
+      createdAt: agency.createdAt.toISOString(),
+    }));
+  }
+
+  async getAgenciesMetrics() {
+    const agencies = await this.prisma.agency.findMany({
+      select: {
+        id: true,
+        status: true,
+        plan: true,
+        createdAt: true,
+        _count: {
+          select: {
+            users: true,
+            properties: true,
+          },
+        },
+      },
+    });
+
+    const totalAgencies = agencies.length;
+    const activeAgencies = agencies.filter(a => a.status === 'ACTIVE').length;
+    const inactiveAgencies = agencies.filter(a => a.status === 'INACTIVE').length;
+
+    const planDistribution = agencies.reduce((acc, agency) => {
+      acc[agency.plan] = (acc[agency.plan] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const totalUsers = agencies.reduce((sum, a) => sum + a._count.users, 0);
+    const totalProperties = agencies.reduce((sum, a) => sum + a._count.properties, 0);
+
+    const monthlySignups = agencies.reduce((acc, agency) => {
+      const month = agency.createdAt.toISOString().slice(0, 7); // YYYY-MM
+      acc[month] = (acc[month] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return {
+      totalAgencies,
+      activeAgencies,
+      inactiveAgencies,
+      planDistribution,
+      totalUsers,
+      totalProperties,
+      monthlySignups,
+    };
+  }
 }

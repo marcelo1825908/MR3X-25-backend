@@ -220,8 +220,11 @@ export class ChatsService {
 
   async getAvailableUsers(userId: string, role: string, userAgencyId?: string) {
     const userIdBigInt = BigInt(userId);
+    
+    // Normalize role to uppercase for comparison
+    const normalizedRole = role?.toUpperCase();
 
-    if (role === 'CEO') {
+    if (normalizedRole === 'CEO') {
       const adminUsers = await this.prisma.user.findMany({
         where: {
           id: { not: userIdBigInt },
@@ -246,7 +249,7 @@ export class ChatsService {
       }));
     }
 
-    if (role === 'ADMIN') {
+    if (normalizedRole === 'ADMIN') {
       const createdUsers = await this.prisma.user.findMany({
         where: {
           id: { not: userIdBigInt },
@@ -291,7 +294,7 @@ export class ChatsService {
       }));
     }
 
-    if (role === 'AGENCY_ADMIN' && userAgencyId) {
+    if (normalizedRole === 'AGENCY_ADMIN' && userAgencyId) {
       const agencyUsers = await this.prisma.user.findMany({
         where: {
           agencyId: BigInt(userAgencyId),
@@ -344,7 +347,7 @@ export class ChatsService {
       }));
     }
 
-    if (role === 'AGENCY_MANAGER' && userAgencyId) {
+    if (normalizedRole === 'AGENCY_MANAGER' && userAgencyId) {
       const agencyUsers = await this.prisma.user.findMany({
         where: {
           agencyId: BigInt(userAgencyId),
@@ -369,7 +372,33 @@ export class ChatsService {
       }));
     }
 
-    if (role === 'BROKER' && userAgencyId) {
+    if (normalizedRole === 'REPRESENTATIVE') {
+      // REPRESENTATIVE can chat only with ADMIN users
+      const adminUsers = await this.prisma.user.findMany({
+        where: {
+          id: { not: userIdBigInt },
+          role: 'ADMIN',
+          status: 'ACTIVE',
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      });
+
+      return adminUsers.map(u => ({
+        id: u.id.toString(),
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        role: u.role,
+      }));
+    }
+
+    if (normalizedRole === 'BROKER' && userAgencyId) {
       const agencyUsers = await this.prisma.user.findMany({
         where: {
           agencyId: BigInt(userAgencyId),
@@ -427,7 +456,7 @@ export class ChatsService {
       }));
     }
 
-    if (role === 'INQUILINO') {
+    if (normalizedRole === 'INQUILINO') {
       const tenantContracts = await this.prisma.contract.findMany({
         where: {
           tenantId: userIdBigInt,
@@ -484,7 +513,7 @@ export class ChatsService {
       }));
     }
 
-    if (role === 'PROPRIETARIO' || role === 'INDEPENDENT_OWNER') {
+    if (normalizedRole === 'PROPRIETARIO' || normalizedRole === 'INDEPENDENT_OWNER') {
       // Get all tenants registered by this owner (not just those with contracts)
       const ownerTenants = await this.prisma.user.findMany({
         where: {

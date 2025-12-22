@@ -181,4 +181,14 @@ export class SalesRepController {
   async markAllNotificationsAsRead(@Request() req: any) {
     return { success: true, message: 'All notifications marked as read' };
   }
+
+  @Get('agencies')
+  async getAgenciesSummary(@Request() req: any) {
+    return this.salesRepService.getAgenciesSummary();
+  }
+
+  @Get('agencies/metrics')
+  async getAgenciesMetrics(@Request() req: any) {
+    return this.salesRepService.getAgenciesMetrics();
+  }
 }
