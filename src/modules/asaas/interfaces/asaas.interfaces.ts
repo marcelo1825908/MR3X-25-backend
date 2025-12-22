@@ -100,6 +100,7 @@ export interface AsaasPayment {
 
 export interface CreatePaymentDto {
   customer: string;
+  customerCpfCnpj?: string;
   billingType: AsaasBillingType;
   value: number;
   dueDate: string;

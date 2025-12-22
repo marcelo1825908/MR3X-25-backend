@@ -907,6 +907,50 @@ export class PlanEnforcementService {
     return result;
   }
 
+  async enforceCurrentPlanLimitsForOwner(ownerId: string): Promise<EnforcementResult> {
+    const owner = await this.prisma.user.findUnique({
+      where: { id: BigInt(ownerId) },
+      select: { id: true, plan: true, role: true },
+    });
+
+    if (!owner) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    const currentPlan = owner.plan || 'FREE';
+    const planConfig = getPlanByName(currentPlan) || PLANS_CONFIG.FREE;
+
+    let result: EnforcementResult = {
+      contractsFrozen: 0,
+      usersFrozen: 0,
+      propertiesFrozen: 0,
+      tenantsFrozen: 0,
+      contractsUnfrozen: 0,
+      usersUnfrozen: 0,
+      propertiesUnfrozen: 0,
+      tenantsUnfrozen: 0,
+      message: '',
+    };
+
+    const propertyResult = await this.freezeExcessPropertiesForOwner(ownerId, planConfig.maxProperties);
+    result.propertiesFrozen = propertyResult.frozen;
+
+    const tenantResult = await this.freezeExcessTenantsForOwner(ownerId, planConfig.maxTenants);
+    result.tenantsFrozen = tenantResult.frozen;
+
+    const frozen: string[] = [];
+    if (result.propertiesFrozen > 0) frozen.push(`${result.propertiesFrozen} imóvel(is)`);
+    if (result.tenantsFrozen > 0) frozen.push(`${result.tenantsFrozen} inquilino(s)`);
+
+    result.message = frozen.length > 0
+      ? `Limites do plano ${planConfig.displayName} aplicados. ${frozen.join(', ')} foram congelados.`
+      : `Todos os recursos estão dentro dos limites do plano ${planConfig.displayName}. Nenhuma alteração necessária.`;
+
+    await this.logEnforcementAction(ownerId, 'OWNER_PLAN_LIMITS_ENFORCED', result);
+
+    return result;
+  }
+
   async freezeExcessContracts(agencyId: string, limit: number): Promise<FreezeResult> {
     const activeContracts = await this.prisma.contract.findMany({
       where: {
@@ -1485,7 +1529,7 @@ export class PlanEnforcementService {
 
     const activeTenants = await this.prisma.user.findMany({
       where: {
-        createdBy: BigInt(ownerId),
+        ownerId: BigInt(ownerId),
         isFrozen: false,
         status: 'ACTIVE',
         role: UserRole.INQUILINO,
@@ -1577,7 +1621,7 @@ export class PlanEnforcementService {
 
     const activeCount = await this.prisma.user.count({
       where: {
-        createdBy: BigInt(ownerId),
+        ownerId: BigInt(ownerId),
         isFrozen: false,
         status: 'ACTIVE',
         role: UserRole.INQUILINO,
@@ -1595,7 +1639,7 @@ export class PlanEnforcementService {
 
     const frozenTenants = await this.prisma.user.findMany({
       where: {
-        createdBy: BigInt(ownerId),
+        ownerId: BigInt(ownerId),
         isFrozen: true,
         role: UserRole.INQUILINO,
       },
@@ -1861,11 +1905,46 @@ export class PlanEnforcementService {
   async previewPlanChange(agencyId: string, newPlan: string): Promise<{
     currentPlan: string;
     newPlan: string;
-    currentLimits: { properties: number; users: number };
-    newLimits: { properties: number; users: number };
-    currentUsage: { properties: number; users: number };
-    willFreeze: { properties: number; users: number };
-    willUnfreeze: { properties: number; users: number };
+    currentLimits: { 
+      properties: number; 
+      users: number;
+      tenants: number;
+      owners: number;
+      brokers: number;
+      managers: number;
+    };
+    newLimits: { 
+      properties: number; 
+      users: number;
+      tenants: number;
+      owners: number;
+      brokers: number;
+      managers: number;
+    };
+    currentUsage: { 
+      properties: number; 
+      users: number;
+      tenants: number;
+      owners: number;
+      brokers: number;
+      managers: number;
+    };
+    willFreeze: { 
+      properties: number; 
+      users: number;
+      tenants: number;
+      owners: number;
+      brokers: number;
+      managers: number;
+    };
+    willUnfreeze: { 
+      properties: number; 
+      users: number;
+      tenants: number;
+      owners: number;
+      brokers: number;
+      managers: number;
+    };
     isUpgrade: boolean;
     warning?: string;
   }> {
@@ -1890,36 +1969,115 @@ export class PlanEnforcementService {
       },
     });
 
-    const activeUsers = await this.prisma.user.count({
-      where: {
-        agencyId: BigInt(agencyId),
-        isFrozen: false,
-        status: 'ACTIVE',
-        role: { notIn: EXCLUDED_FROM_USER_COUNT },
-      },
-    });
+    // Count active users by role
+    const [activeTenants, activeOwners, activeBrokers, activeManagers] = await Promise.all([
+      this.prisma.user.count({
+        where: {
+          agencyId: BigInt(agencyId),
+          isFrozen: false,
+          status: 'ACTIVE',
+          role: UserRole.INQUILINO,
+        },
+      }),
+      this.prisma.user.count({
+        where: {
+          agencyId: BigInt(agencyId),
+          isFrozen: false,
+          status: 'ACTIVE',
+          role: UserRole.PROPRIETARIO,
+        },
+      }),
+      this.prisma.user.count({
+        where: {
+          agencyId: BigInt(agencyId),
+          isFrozen: false,
+          status: 'ACTIVE',
+          role: UserRole.BROKER,
+        },
+      }),
+      this.prisma.user.count({
+        where: {
+          agencyId: BigInt(agencyId),
+          isFrozen: false,
+          status: 'ACTIVE',
+          role: UserRole.AGENCY_MANAGER,
+        },
+      }),
+    ]);
+
+    const activeUsers = activeTenants + activeOwners + activeBrokers + activeManagers;
 
     const frozenContracts = await this.prisma.contract.count({
       where: { agencyId: BigInt(agencyId), deleted: false, isFrozen: true },
     });
 
-    const frozenUsers = await this.prisma.user.count({
-      where: {
-        agencyId: BigInt(agencyId),
-        isFrozen: true,
-        role: { notIn: EXCLUDED_FROM_USER_COUNT },
-      },
-    });
+    // Count frozen users by role
+    const [frozenTenants, frozenOwners, frozenBrokers, frozenManagers] = await Promise.all([
+      this.prisma.user.count({
+        where: {
+          agencyId: BigInt(agencyId),
+          isFrozen: true,
+          role: UserRole.INQUILINO,
+        },
+      }),
+      this.prisma.user.count({
+        where: {
+          agencyId: BigInt(agencyId),
+          isFrozen: true,
+          role: UserRole.PROPRIETARIO,
+        },
+      }),
+      this.prisma.user.count({
+        where: {
+          agencyId: BigInt(agencyId),
+          isFrozen: true,
+          role: UserRole.BROKER,
+        },
+      }),
+      this.prisma.user.count({
+        where: {
+          agencyId: BigInt(agencyId),
+          isFrozen: true,
+          role: UserRole.AGENCY_MANAGER,
+        },
+      }),
+    ]);
 
+    const frozenUsers = frozenTenants + frozenOwners + frozenBrokers + frozenManagers;
+
+    // Calculate what would freeze for contracts
     const contractsWouldFreeze = Math.max(0, activeContracts - newConfig.maxActiveContracts);
-    const newUserLimit = newConfig.maxInternalUsers === -1 ? 9999 : newConfig.maxInternalUsers;
-    const usersWouldFreeze = Math.max(0, activeUsers - newUserLimit);
-
     const canUnfreezeContracts = Math.max(0, newConfig.maxActiveContracts - activeContracts);
     const contractsWouldUnfreeze = Math.min(canUnfreezeContracts, frozenContracts);
 
-    const canUnfreezeUsers = Math.max(0, newUserLimit - activeUsers);
-    const usersWouldUnfreeze = Math.min(canUnfreezeUsers, frozenUsers);
+    // Calculate what would freeze/unfreeze for each user type
+    const currentTenantLimit = currentConfig.maxTenants === -1 ? 9999 : currentConfig.maxTenants;
+    const newTenantLimit = newConfig.maxTenants === -1 ? 9999 : newConfig.maxTenants;
+    const tenantsWouldFreeze = Math.max(0, activeTenants - newTenantLimit);
+    const canUnfreezeTenants = Math.max(0, newTenantLimit - activeTenants);
+    const tenantsWouldUnfreeze = Math.min(canUnfreezeTenants, frozenTenants);
+
+    const currentOwnerLimit = currentConfig.maxOwners === -1 ? 9999 : currentConfig.maxOwners;
+    const newOwnerLimit = newConfig.maxOwners === -1 ? 9999 : newConfig.maxOwners;
+    const ownersWouldFreeze = Math.max(0, activeOwners - newOwnerLimit);
+    const canUnfreezeOwners = Math.max(0, newOwnerLimit - activeOwners);
+    const ownersWouldUnfreeze = Math.min(canUnfreezeOwners, frozenOwners);
+
+    const currentBrokerLimit = currentConfig.maxBrokers === -1 ? 9999 : currentConfig.maxBrokers;
+    const newBrokerLimit = newConfig.maxBrokers === -1 ? 9999 : newConfig.maxBrokers;
+    const brokersWouldFreeze = Math.max(0, activeBrokers - newBrokerLimit);
+    const canUnfreezeBrokers = Math.max(0, newBrokerLimit - activeBrokers);
+    const brokersWouldUnfreeze = Math.min(canUnfreezeBrokers, frozenBrokers);
+
+    const currentManagerLimit = currentConfig.maxManagers === -1 ? 9999 : currentConfig.maxManagers;
+    const newManagerLimit = newConfig.maxManagers === -1 ? 9999 : newConfig.maxManagers;
+    const managersWouldFreeze = Math.max(0, activeManagers - newManagerLimit);
+    const canUnfreezeManagers = Math.max(0, newManagerLimit - activeManagers);
+    const managersWouldUnfreeze = Math.min(canUnfreezeManagers, frozenManagers);
+
+    // Calculate total users that would freeze (sum of all roles)
+    const usersWouldFreeze = tenantsWouldFreeze + ownersWouldFreeze + brokersWouldFreeze + managersWouldFreeze;
+    const usersWouldUnfreeze = tenantsWouldUnfreeze + ownersWouldUnfreeze + brokersWouldUnfreeze + managersWouldUnfreeze;
 
     let warning: string | undefined;
     if (contractsWouldFreeze > 0 || usersWouldFreeze > 0) {
@@ -1930,9 +2088,14 @@ export class PlanEnforcementService {
     }
 
     const currentUserLimit = currentConfig.maxInternalUsers === -1 ? 9999 : currentConfig.maxInternalUsers;
+    const newUserLimit = newConfig.maxInternalUsers === -1 ? 9999 : newConfig.maxInternalUsers;
 
     const isUpgrade = newConfig.maxProperties > currentConfig.maxProperties ||
-                      newUserLimit > currentUserLimit;
+                      newUserLimit > currentUserLimit ||
+                      newTenantLimit > currentTenantLimit ||
+                      newOwnerLimit > currentOwnerLimit ||
+                      newBrokerLimit > currentBrokerLimit ||
+                      newManagerLimit > currentManagerLimit;
 
     return {
       currentPlan: agency.plan,
@@ -1940,22 +2103,42 @@ export class PlanEnforcementService {
       currentLimits: {
         properties: currentConfig.maxProperties,
         users: currentUserLimit,
+        tenants: currentTenantLimit,
+        owners: currentOwnerLimit,
+        brokers: currentBrokerLimit,
+        managers: currentManagerLimit,
       },
       newLimits: {
         properties: newConfig.maxProperties,
         users: newUserLimit,
+        tenants: newTenantLimit,
+        owners: newOwnerLimit,
+        brokers: newBrokerLimit,
+        managers: newManagerLimit,
       },
       currentUsage: {
         properties: activeContracts,
         users: activeUsers,
+        tenants: activeTenants,
+        owners: activeOwners,
+        brokers: activeBrokers,
+        managers: activeManagers,
       },
       willFreeze: {
         properties: contractsWouldFreeze,
         users: usersWouldFreeze,
+        tenants: tenantsWouldFreeze,
+        owners: ownersWouldFreeze,
+        brokers: brokersWouldFreeze,
+        managers: managersWouldFreeze,
       },
       willUnfreeze: {
         properties: contractsWouldUnfreeze,
         users: usersWouldUnfreeze,
+        tenants: tenantsWouldUnfreeze,
+        owners: ownersWouldUnfreeze,
+        brokers: brokersWouldUnfreeze,
+        managers: managersWouldUnfreeze,
       },
       isUpgrade,
       warning,

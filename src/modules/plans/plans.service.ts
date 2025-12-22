@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../config/prisma.service';
 import { AsaasService } from '../asaas/asaas.service';
+import { PlanEnforcementService } from './plan-enforcement.service';
 import {
   DEFAULT_PLANS,
   Plan,
@@ -99,6 +100,7 @@ export class PlansService {
   constructor(
     private prisma: PrismaService,
     private asaasService: AsaasService,
+    private planEnforcement: PlanEnforcementService,
   ) {}
 
   private getPlansWithUpdates(): Plan[] {
@@ -1310,15 +1312,23 @@ export class PlansService {
       where: { ownerId: BigInt(userId), deleted: false, isFrozen: true },
     });
 
-    // Count tenants in contracts where user is the owner
-    const properties = await this.prisma.property.findMany({
-      where: { ownerId: BigInt(userId), deleted: false },
-      select: { id: true },
+    // Count active tenants (users with role INQUILINO and ownerId pointing to this owner)
+    const activeTenantCount = await this.prisma.user.count({
+      where: { 
+        ownerId: BigInt(userId), 
+        role: 'INQUILINO',
+        isFrozen: false,
+        status: 'ACTIVE',
+      },
     });
-    const propertyIds = properties.map(p => p.id);
 
-    const tenantCount = await this.prisma.contract.count({
-      where: { propertyId: { in: propertyIds }, status: 'ACTIVE' },
+    // Count frozen tenants
+    const frozenTenantCount = await this.prisma.user.count({
+      where: { 
+        ownerId: BigInt(userId), 
+        role: 'INQUILINO',
+        isFrozen: true,
+      },
     });
 
     return {
@@ -1328,12 +1338,12 @@ export class PlansService {
         limit: planConfig?.maxProperties || 1,
       },
       users: {
-        active: tenantCount,
-        frozen: 0,
+        active: activeTenantCount,
+        frozen: frozenTenantCount,
         limit: planConfig?.maxTenants || 2,
       },
       plan: planName,
-      upgradeRequired: frozenPropertyCount > 0,
+      upgradeRequired: frozenPropertyCount > 0 || frozenTenantCount > 0,
     };
   }
 
@@ -1378,9 +1388,17 @@ export class PlansService {
       users: Math.max(0, currentUsage.users - newLimits.users),
     };
 
+    // Calculate what can be unfrozen for properties
+    const canUnfreezeProperties = Math.max(0, newLimits.properties - currentUsage.properties);
+    const propertiesWouldUnfreeze = Math.min(usage.contracts.frozen, canUnfreezeProperties);
+
+    // Calculate what can be unfrozen for tenants
+    const canUnfreezeTenants = Math.max(0, newLimits.users - currentUsage.users);
+    const tenantsWouldUnfreeze = Math.min(usage.users.frozen, canUnfreezeTenants);
+
     const willUnfreeze = {
-      properties: Math.min(usage.contracts.frozen, Math.max(0, newLimits.properties - currentUsage.properties)),
-      users: 0,
+      properties: propertiesWouldUnfreeze,
+      users: tenantsWouldUnfreeze,
     };
 
     const isUpgrade = newPlanConfig.price > (currentPlanConfig?.price || 0);
@@ -1412,59 +1430,12 @@ export class PlansService {
       throw new BadRequestException(`Plano inválido: ${newPlan}`);
     }
 
-    // Get current usage
-    const usage = await this.getOwnerPlanUsage(userId);
-
-    // Freeze excess properties if downgrading
-    if (usage.contracts.active > newPlanConfig.maxProperties) {
-      const propertiesToFreeze = usage.contracts.active - newPlanConfig.maxProperties;
-
-      const properties = await this.prisma.property.findMany({
-        where: { ownerId: BigInt(userId), deleted: false, isFrozen: false },
-        orderBy: { createdAt: 'desc' },
-        take: propertiesToFreeze,
-        select: { id: true },
-      });
-
-      for (const prop of properties) {
-        await this.prisma.property.update({
-          where: { id: prop.id },
-          data: { isFrozen: true, frozenAt: new Date() },
-        });
-      }
-    }
-
-    // Unfreeze properties if upgrading and there's room
-    if (usage.contracts.frozen > 0 && usage.contracts.active < newPlanConfig.maxProperties) {
-      const canUnfreeze = Math.min(
-        usage.contracts.frozen,
-        newPlanConfig.maxProperties - usage.contracts.active
-      );
-
-      const frozenProperties = await this.prisma.property.findMany({
-        where: { ownerId: BigInt(userId), deleted: false, isFrozen: true },
-        orderBy: { frozenAt: 'asc' },
-        take: canUnfreeze,
-        select: { id: true },
-      });
-
-      for (const prop of frozenProperties) {
-        await this.prisma.property.update({
-          where: { id: prop.id },
-          data: { isFrozen: false, frozenAt: null },
-        });
-      }
-    }
-
-    // Update user plan
-    await this.prisma.user.update({
-      where: { id: BigInt(userId) },
-      data: { plan: newPlan },
-    });
+    // Use plan enforcement service to handle all freezing/unfreezing logic
+    const enforcementResult = await this.planEnforcement.enforcePlanLimitsForOwner(userId, newPlan);
 
     return {
       success: true,
-      message: `Plano alterado para ${newPlanConfig.displayName} com sucesso`,
+      message: enforcementResult.message || `Plano alterado para ${newPlanConfig.displayName} com sucesso`,
       plan: newPlan,
     };
   }
@@ -1547,6 +1518,18 @@ export class PlansService {
       throw new BadRequestException(`Erro ao sincronizar cliente: ${customerResult.error || 'erro desconhecido'}`);
     }
 
+    // Verify customer has CPF/CNPJ set in Asaas and ensure it's correct
+    const cleanDocument = user.document.replace(/\D/g, '');
+    try {
+      const asaasCustomer = await this.asaasService.getCustomer(customerResult.customerId);
+      if (!asaasCustomer.cpfCnpj || asaasCustomer.cpfCnpj.replace(/\D/g, '') !== cleanDocument) {
+        this.logger.warn(`Customer CPF/CNPJ mismatch or missing. Updating customer ${customerResult.customerId} with CPF/CNPJ: ${cleanDocument}`);
+        await this.asaasService.updateCustomer(customerResult.customerId, { cpfCnpj: cleanDocument });
+      }
+    } catch (error) {
+      this.logger.warn(`Could not verify/update customer CPF/CNPJ: ${error.message}`);
+    }
+
     // Calculate payment value (new plan price)
     const paymentValue = newPlanConfig.price;
 
@@ -1555,10 +1538,11 @@ export class PlansService {
     const externalReference = `owner_plan_change_${userId}_${newPlan}`;
     const description = `Upgrade para plano ${newPlanConfig.displayName} - ${user.name || 'Proprietário'}`;
 
-    this.logger.log(`Creating payment for owner ${userId}: value=${paymentValue}, dueDate=${dueDate}, customerId=${customerResult.customerId}`);
+    this.logger.log(`Creating payment for owner ${userId}: value=${paymentValue}, dueDate=${dueDate}, customerId=${customerResult.customerId}, cpfCnpj=${cleanDocument}`);
 
     const paymentResult = await this.asaasService.createCompletePayment({
       customerId: customerResult.customerId,
+      customerCpfCnpj: cleanDocument, // Explicitly pass CPF/CNPJ to ensure it's pre-filled
       value: paymentValue,
       dueDate,
       description,

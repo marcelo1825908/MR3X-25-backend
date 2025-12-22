@@ -662,6 +662,15 @@ export class AgenciesService {
       throw new NotFoundException('Agency not found');
     }
 
+    // Validate required fields for payment
+    if (!agency.cnpj || agency.cnpj.trim() === '') {
+      throw new BadRequestException('CNPJ é obrigatório para realizar o pagamento. Por favor, complete o perfil da agência antes de fazer upgrade.');
+    }
+
+    if (!agency.email || agency.email.trim() === '') {
+      throw new BadRequestException('Email é obrigatório para realizar o pagamento. Por favor, complete o perfil da agência antes de fazer upgrade.');
+    }
+
     const currentPlan = agency.plan || 'FREE';
     const newPlanConfig = PLANS_CONFIG[newPlan];
     const currentPlanConfig = PLANS_CONFIG[currentPlan];
@@ -710,6 +719,20 @@ export class AgenciesService {
       throw new BadRequestException(`Erro ao sincronizar cliente: ${customerResult.error || 'erro desconhecido'}`);
     }
 
+    // Verify customer has CPF/CNPJ set in Asaas and ensure it's correct
+    const cleanCnpj = agency.cnpj?.replace(/\D/g, '');
+    if (cleanCnpj) {
+      try {
+        const asaasCustomer = await this.asaasService.getCustomer(customerResult.customerId);
+        if (!asaasCustomer.cpfCnpj || asaasCustomer.cpfCnpj.replace(/\D/g, '') !== cleanCnpj) {
+          this.logger.warn(`Customer CPF/CNPJ mismatch or missing. Updating customer ${customerResult.customerId} with CNPJ: ${cleanCnpj}`);
+          await this.asaasService.updateCustomer(customerResult.customerId, { cpfCnpj: cleanCnpj });
+        }
+      } catch (error) {
+        this.logger.warn(`Could not verify/update customer CPF/CNPJ: ${error.message}`);
+      }
+    }
+
     // Calculate payment value (new plan price)
     const paymentValue = newPlanConfig.price;
 
@@ -718,10 +741,11 @@ export class AgenciesService {
     const externalReference = `plan_change_${agencyId}_${newPlan}`;
     const description = `Upgrade para plano ${newPlanConfig.displayName} - ${agency.name}`;
 
-    this.logger.log(`Creating payment for agency ${agencyId}: value=${paymentValue}, dueDate=${dueDate}, customerId=${customerResult.customerId}`);
+    this.logger.log(`Creating payment for agency ${agencyId}: value=${paymentValue}, dueDate=${dueDate}, customerId=${customerResult.customerId}, cnpj=${cleanCnpj}`);
 
     const paymentResult = await this.asaasService.createCompletePayment({
       customerId: customerResult.customerId,
+      customerCpfCnpj: cleanCnpj, // Explicitly pass CNPJ to pre-fill payment form
       value: paymentValue,
       dueDate,
       description,

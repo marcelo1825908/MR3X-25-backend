@@ -159,13 +159,26 @@ export class AsaasService implements OnModuleInit {
       };
 
       if (customer) {
+        // Always update customer with latest data including CPF/CNPJ
+        this.logger.log(`Updating existing customer ${customer.id} with CPF/CNPJ: ${customerData.cpfCnpj}`);
         customer = await this.updateCustomer(customer.id, customerData);
+        // Verify CPF/CNPJ was updated
+        const updatedCustomer = await this.getCustomer(customer.id);
+        if (updatedCustomer.cpfCnpj !== customerData.cpfCnpj) {
+          this.logger.warn(`Customer CPF/CNPJ mismatch. Expected: ${customerData.cpfCnpj}, Got: ${updatedCustomer.cpfCnpj}`);
+          // Try updating again with explicit CPF/CNPJ
+          customer = await this.updateCustomer(customer.id, { cpfCnpj: customerData.cpfCnpj });
+        }
       } else {
         customer = await this.findCustomerByCpfCnpj(userData.document);
 
         if (customer) {
+          // Update existing customer found by CPF/CNPJ
+          this.logger.log(`Updating customer found by CPF/CNPJ ${customer.id} with latest data`);
           customer = await this.updateCustomer(customer.id, customerData);
         } else {
+          // Create new customer
+          this.logger.log(`Creating new customer with CPF/CNPJ: ${customerData.cpfCnpj}`);
           customer = await this.createCustomer(customerData);
         }
       }
@@ -243,6 +256,7 @@ export class AsaasService implements OnModuleInit {
 
   async createCompletePayment(params: {
     customerId: string;
+    customerCpfCnpj?: string;
     value: number;
     dueDate: string;
     description: string;
@@ -254,8 +268,20 @@ export class AsaasService implements OnModuleInit {
     fine?: { value: number; type: 'FIXED' | 'PERCENTAGE' };
   }): Promise<PaymentCreationResult> {
     try {
+      // If customerCpfCnpj is not provided, fetch it from the customer
+      let cpfCnpj = params.customerCpfCnpj;
+      if (!cpfCnpj) {
+        try {
+          const customer = await this.getCustomer(params.customerId);
+          cpfCnpj = customer.cpfCnpj;
+        } catch (error) {
+          this.logger.warn(`Could not fetch customer CPF/CNPJ: ${error.message}`);
+        }
+      }
+
       const paymentData: CreatePaymentDto = {
         customer: params.customerId,
+        customerCpfCnpj: cpfCnpj ? cpfCnpj.replace(/\D/g, '') : undefined,
         billingType: params.billingType || 'UNDEFINED',
         value: params.value,
         dueDate: params.dueDate,

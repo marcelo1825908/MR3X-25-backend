@@ -447,4 +447,11 @@ export class PlansController {
   async checkOwnerPropertyCreationAllowed(@Param('userId') userId: string) {
     return this.plansService.checkOwnerPropertyCreationAllowed(userId);
   }
+
+  @Post('owner/:userId/enforce-limits')
+  @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.INDEPENDENT_OWNER)
+  @ApiOperation({ summary: 'Enforce current plan limits for independent owner (freeze excess properties/tenants)' })
+  async enforceCurrentPlanLimitsForOwner(@Param('userId') userId: string) {
+    return this.planEnforcementService.enforceCurrentPlanLimitsForOwner(userId);
+  }
 }
