@@ -474,9 +474,8 @@ export class InspectionsService {
       throw new NotFoundException('Inspection not found');
     }
 
-    if (inspection.status === 'APROVADA') {
-      throw new ForbiddenException('Cannot delete an approved inspection');
-    }
+    // Allow deletion of approved inspections for historical cleanup
+    // Removed restriction to allow deletion in any status
 
     await this.prisma.inspectionItem.deleteMany({
       where: { inspectionId: BigInt(id) },

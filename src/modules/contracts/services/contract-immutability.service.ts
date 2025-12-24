@@ -139,22 +139,22 @@ export class ContractImmutabilityService {
       case 'REVOGADO':
         return {
           canEdit: false,
-          canDelete: false,
+          canDelete: true, // Allow deletion for historical cleanup
           canAddSignature: false,
           canRevoke: false,
           canFinalize: false,
-          reason: 'Contrato revogado - documento arquivado e imutável',
+          reason: 'Contrato revogado - pode ser excluído para limpeza de histórico',
           currentStatus: status,
         };
 
       case 'ENCERRADO':
         return {
           canEdit: false,
-          canDelete: false,
+          canDelete: true, // Allow deletion for historical cleanup
           canAddSignature: false,
           canRevoke: false,
           canFinalize: false,
-          reason: 'Contrato encerrado - documento arquivado e imutável',
+          reason: 'Contrato encerrado - pode ser excluído para limpeza de histórico',
           currentStatus: status,
         };
 
