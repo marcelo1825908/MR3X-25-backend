@@ -9,6 +9,7 @@ import {
   UploadedFiles,
   Res,
   Query,
+  BadRequestException,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody, ApiQuery } from '@nestjs/swagger';
@@ -99,7 +100,11 @@ export class InspectionMediaController {
     @CurrentUser() user?: any,
   ) {
     if (!files || files.length === 0) {
-      return { success: false, error: 'No files uploaded' };
+      throw new BadRequestException('Nenhum arquivo foi enviado');
+    }
+
+    if (files.length > 20) {
+      throw new BadRequestException(`Limite de 20 arquivos por upload. Você tentou enviar ${files.length} arquivos.`);
     }
 
     const uploadedMedia = await this.inspectionMediaService.uploadMedia(

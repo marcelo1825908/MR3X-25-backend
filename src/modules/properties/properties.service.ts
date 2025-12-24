@@ -318,10 +318,25 @@ export class PropertiesService {
       include: {
         owner: {
           select: {
+            id: true,
             role: true,
           },
         },
-        tenant: true,
+        tenant: {
+          select: {
+            id: true,
+          },
+        },
+        broker: {
+          select: {
+            id: true,
+          },
+        },
+        agency: {
+          select: {
+            id: true,
+          },
+        },
       },
     });
 
@@ -349,7 +364,14 @@ export class PropertiesService {
       }
     }
 
-    return this.serializeProperty(updated);
+    // Ensure all relations are properly loaded before serialization
+    try {
+      return this.serializeProperty(updated);
+    } catch (error) {
+      console.error('Error serializing property:', error);
+      console.error('Property data:', JSON.stringify(updated, null, 2));
+      throw error;
+    }
   }
 
   async remove(id: string, userId: string) {
@@ -381,16 +403,26 @@ export class PropertiesService {
   }
 
   private serializeProperty(property: any) {
+    // Helper function to safely serialize a relation
+    const serializeRelation = (rel: any) => {
+      if (!rel || rel.id == null) return null;
+      try {
+        return { ...rel, id: rel.id.toString() };
+      } catch (error) {
+        return null;
+      }
+    };
+
     return {
       ...property,
-      id: property.id.toString(),
-      ownerId: property.ownerId?.toString(),
-      tenantId: property.tenantId?.toString(),
-      brokerId: property.brokerId?.toString(),
-      agencyId: property.agencyId?.toString(),
-      createdBy: property.createdBy?.toString(),
-      deletedBy: property.deletedBy?.toString(),
-      monthlyRent: property.monthlyRent?.toString(),
+      id: property.id?.toString() || property.id,
+      ownerId: property.ownerId?.toString() || null,
+      tenantId: property.tenantId?.toString() || null,
+      brokerId: property.brokerId?.toString() || null,
+      agencyId: property.agencyId?.toString() || null,
+      createdBy: property.createdBy?.toString() || null,
+      deletedBy: property.deletedBy?.toString() || null,
+      monthlyRent: property.monthlyRent?.toString() || null,
       nextDueDate: property.nextDueDate?.toISOString() || null,
       createdAt: property.createdAt?.toISOString() || null,
       frozenAt: property.frozenAt?.toISOString() || null,
@@ -401,10 +433,10 @@ export class PropertiesService {
       totalArea: property.totalArea?.toString() || null,
       condominiumFee: property.condominiumFee?.toString() || null,
       iptuValue: property.iptuValue?.toString() || null,
-      owner: property.owner ? { ...property.owner, id: property.owner.id.toString() } : null,
-      tenant: property.tenant ? { ...property.tenant, id: property.tenant.id.toString() } : null,
-      broker: property.broker ? { ...property.broker, id: property.broker.id.toString() } : null,
-      agency: property.agency ? { ...property.agency, id: property.agency.id.toString() } : null,
+      owner: serializeRelation(property.owner),
+      tenant: serializeRelation(property.tenant),
+      broker: serializeRelation(property.broker),
+      agency: serializeRelation(property.agency),
     };
   }
 
