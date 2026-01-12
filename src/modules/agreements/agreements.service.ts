@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../../config/prisma.service';
 import { CreateAgreementDto, AgreementStatus } from './dto/create-agreement.dto';
 import { UpdateAgreementDto, SignAgreementDto, ApproveRejectAgreementDto } from './dto/update-agreement.dto';
@@ -12,12 +12,15 @@ import {
   AgreementStatusValue,
 } from './constants/agreement-permissions.constants';
 import { NotificationsService } from '../notifications/notifications.service';
+import { BillingCycleService } from '../billing-cycle/billing-cycle.service';
 
 @Injectable()
 export class AgreementsService {
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
+    @Inject(forwardRef(() => BillingCycleService))
+    private billingCycleService: BillingCycleService,
   ) {}
 
   private generateAgreementToken(): string {
@@ -206,6 +209,12 @@ export class AgreementsService {
       throw new NotFoundException('Property not found');
     }
 
+    // Only allow agreements for rented properties (ALUGADO)
+    const propertyStatus = (property.status || '').toUpperCase().trim();
+    if (propertyStatus !== 'ALUGADO' && propertyStatus !== 'RENTED') {
+      throw new BadRequestException('Acordos só podem ser criados para imóveis alugados (status ALUGADO)');
+    }
+
     if (data.contractId) {
       const contract = await this.prisma.contract.findUnique({
         where: { id: BigInt(data.contractId) },
@@ -235,6 +244,10 @@ export class AgreementsService {
         originalAmount: data.originalAmount || null,
         negotiatedAmount: data.negotiatedAmount || null,
         fineAmount: data.fineAmount || null,
+        interestPercent: data.interestPercent || null,
+        interestAmount: data.interestAmount || null,
+        // Auto-calculate interest if percent is provided but amount is not
+        // Auto-calculate fine if percent is provided (we'll need to add finePercent to DTO)
         discountAmount: data.discountAmount || null,
         installments: data.installments || null,
         installmentValue: data.installmentValue || null,
@@ -252,6 +265,22 @@ export class AgreementsService {
         createdBy: BigInt(userId),
       },
     });
+
+    // Track usage for billing
+    if (agreement.agencyId) {
+      try {
+        await this.billingCycleService.trackUsage({
+          agencyId: agreement.agencyId.toString(),
+          feature: 'settlements',
+          quantity: 1,
+          referenceId: agreement.id.toString(),
+          referenceType: 'agreement',
+        });
+      } catch (error) {
+        // Log error but don't fail agreement creation
+        console.error('Error tracking agreement usage:', error);
+      }
+    }
 
     return this.findOne(agreement.id.toString());
   }
@@ -287,6 +316,18 @@ export class AgreementsService {
     if (data.originalAmount !== undefined) updateData.originalAmount = data.originalAmount;
     if (data.negotiatedAmount !== undefined) updateData.negotiatedAmount = data.negotiatedAmount;
     if (data.fineAmount !== undefined) updateData.fineAmount = data.fineAmount;
+    if (data.interestPercent !== undefined) updateData.interestPercent = data.interestPercent;
+    if (data.interestAmount !== undefined) updateData.interestAmount = data.interestAmount;
+    // Auto-calculate interest if percent is provided but amount is not
+    if (data.interestPercent !== undefined && data.interestPercent > 0 && !data.interestAmount && agreement.originalAmount) {
+      const baseAmount = Number(agreement.originalAmount);
+      const daysOverdue = agreement.effectiveDate 
+        ? Math.max(0, Math.floor((new Date().getTime() - new Date(agreement.effectiveDate).getTime()) / (1000 * 60 * 60 * 24)))
+        : 0;
+      const monthlyRate = Number(data.interestPercent) / 100;
+      const dailyRate = monthlyRate / 30;
+      updateData.interestAmount = Math.round((baseAmount * dailyRate * daysOverdue) * 100) / 100;
+    }
     if (data.discountAmount !== undefined) updateData.discountAmount = data.discountAmount;
     if (data.installments !== undefined) updateData.installments = data.installments;
     if (data.installmentValue !== undefined) updateData.installmentValue = data.installmentValue;

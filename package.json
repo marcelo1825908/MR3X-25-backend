@@ -10,7 +10,7 @@
     "start:prod": "node dist/main",
     "migrate": "prisma db push",
     "seed": "npx ts-node prisma/seed.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate && npx puppeteer browsers install chrome"
   },
   "keywords": [
     "nestjs",

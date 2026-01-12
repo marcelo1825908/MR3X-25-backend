@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, forwardRef, Inject } from '@nestjs/common';
 import { PrismaService } from '../../config/prisma.service';
 import { PlanEnforcementService, PLAN_MESSAGES } from '../plans/plan-enforcement.service';
 import { ContractPdfService } from './services/contract-pdf.service';
@@ -7,6 +7,7 @@ import { SignatureLinkService } from './services/signature-link.service';
 import { ContractImmutabilityService } from './services/contract-immutability.service';
 import { ContractValidationService } from './services/contract-validation.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PropertiesService } from '../properties/properties.service';
 
 export interface SignatureDataWithGeo {
   signature: string;
@@ -30,8 +31,24 @@ export class ContractsService {
     private immutabilityService: ContractImmutabilityService,
     private validationService: ContractValidationService,
     private notificationsService: NotificationsService,
+    @Inject(forwardRef(() => PropertiesService))
+    private propertiesService: PropertiesService,
   ) {}
 
+  /**
+   * Find all contracts (lease contracts - Contract model)
+   * 
+   * Access Rules:
+   * - Lease contracts (Contract): Created by Manager/Realtor, involve property owner ↔ tenant
+   *   - Managers (AGENCY_MANAGER) and Realtors (BROKER) can create and view lease contracts
+   *   - Tenants can view their own lease contracts
+   *   - Property owners can view lease contracts for their properties
+   * 
+   * - Property management contracts (ServiceContract): Visible only to Director/Manager, signed only by Director
+   *   - Only AGENCY_ADMIN and AGENCY_MANAGER can view management contracts
+   *   - Only AGENCY_ADMIN (Director) can sign management contracts on behalf of agency
+   *   - Note: ServiceContract access is handled separately (not in this method)
+   */
   async findAll(params: { skip?: number; take?: number; agencyId?: string; status?: string; createdById?: string; userId?: string; userRole?: string; search?: string }) {
     const { skip = 0, take = 10, agencyId, status, createdById, userId, userRole, search } = params;
 
@@ -313,18 +330,30 @@ export class ContractsService {
         userAgent: data.userAgent || null,
         dataSnapshot: dataSnapshot,
         contentSnapshot: data.contentSnapshot || null,
+        readjustmentIndex: data.readjustmentIndex || null,
+        lateFeePercent: data.latePaymentPenaltyPercent ? Number(data.latePaymentPenaltyPercent) : null,
+        interestRatePercent: data.monthlyInterestPercent ? Number(data.monthlyInterestPercent) : null,
+        earlyTerminationPenaltyPercent: data.earlyTerminationPenaltyMonths ? Number(data.earlyTerminationPenaltyMonths) : null,
+        guaranteeType: data.guaranteeType || null,
+        jurisdiction: data.jurisdiction || null,
+        clausesSnapshot: {
+          customReadjustmentIndex: data.customReadjustmentIndex || null,
+          earlyTerminationFixedValue: data.earlyTerminationFixedValue ? Number(data.earlyTerminationFixedValue) : null,
+          contractDate: data.contractDate || null,
+          propertyCharacteristics: data.propertyCharacteristics || null,
+          earlyTerminationPenaltyMonths: data.earlyTerminationPenaltyMonths ? Number(data.earlyTerminationPenaltyMonths) : null,
+          latePaymentPenaltyPercent: data.latePaymentPenaltyPercent ? Number(data.latePaymentPenaltyPercent) : null,
+          monthlyInterestPercent: data.monthlyInterestPercent ? Number(data.monthlyInterestPercent) : null,
+        },
       },
     });
 
-    // Update property: assign tenant and calculate nextDueDate
-    const startDate = new Date(data.startDate);
-    const dueDay = data.dueDay || property?.dueDay || 5; // Default to day 5 if not specified
-    const nextDueDate = new Date(startDate.getFullYear(), startDate.getMonth(), dueDay);
+    // Update property: assign tenant and set nextDueDate to contract end date
+    const endDate = new Date(data.endDate);
     
-    // If the due date has already passed this month, set it for next month
-    if (nextDueDate < startDate) {
-      nextDueDate.setMonth(nextDueDate.getMonth() + 1);
-    }
+    // Set nextDueDate to the contract's end date
+    // This represents the final payment due date for the contract
+    const nextDueDate = endDate;
 
     const propertyUpdateData: any = {
       tenantId: BigInt(data.tenantId),
@@ -343,18 +372,20 @@ export class ContractsService {
       },
     });
 
-    // Calculate status for INDEPENDENT_OWNER: if has both tenant and nextDueDate, change to DISPONIVEL
-    if (updatedProperty.owner?.role === 'INDEPENDENT_OWNER') {
-      const hasTenant = !!updatedProperty.tenantId;
-      const hasNextDue = !!updatedProperty.nextDueDate;
-      
-      if (hasTenant && hasNextDue && updatedProperty.status === 'INCOMPLETO') {
-        // If status is INCOMPLETO but now has both tenant and nextDueDate, change to DISPONIVEL
-        await this.prisma.property.update({
-          where: { id: BigInt(data.propertyId) },
-          data: { status: 'DISPONIVEL' },
-        });
-      }
+    // Update property status based on broker, tenant, nextDueDate and contract status
+    // Property can only be DISPONIVEL when ALL of these are set: brokerId, tenantId, and nextDueDate
+    const correctStatus = await this.propertiesService.determinePropertyStatus(
+      BigInt(data.propertyId),
+      updatedProperty.tenantId,
+      updatedProperty.brokerId,
+      updatedProperty.nextDueDate
+    );
+    
+    if (correctStatus !== updatedProperty.status) {
+      await this.prisma.property.update({
+        where: { id: BigInt(data.propertyId) },
+        data: { status: correctStatus },
+      });
     }
 
     return this.serializeContract(contract);
@@ -384,6 +415,28 @@ export class ContractsService {
       data,
     });
 
+    // Update property status if contract status changed
+    if (data.status && contract.status !== data.status) {
+      const property = await this.prisma.property.findUnique({
+        where: { id: contract.propertyId },
+        select: { tenantId: true, brokerId: true, nextDueDate: true },
+      });
+      
+      if (property) {
+        const correctStatus = await this.propertiesService.determinePropertyStatus(
+          contract.propertyId,
+          property.tenantId,
+          property.brokerId,
+          property.nextDueDate
+        );
+        
+        await this.prisma.property.update({
+          where: { id: contract.propertyId },
+          data: { status: correctStatus },
+        });
+      }
+    }
+
     return this.serializeContract(updated);
   }
 
@@ -409,6 +462,16 @@ export class ContractsService {
   async remove(id: string, userId: string) {
     const contract = await this.prisma.contract.findUnique({
       where: { id: BigInt(id) },
+      include: {
+        property: {
+          select: {
+            id: true,
+            tenantId: true,
+            brokerId: true,
+            nextDueDate: true,
+          },
+        },
+      },
     });
 
     if (!contract) {
@@ -421,6 +484,7 @@ export class ContractsService {
     }
 
     const contractIdBigInt = BigInt(id);
+    const propertyId = contract.propertyId;
 
     await this.prisma.contractClauseHistory.deleteMany({
       where: { contractId: contractIdBigInt },
@@ -467,9 +531,93 @@ export class ContractsService {
       where: { id: contractIdBigInt },
     });
 
+    // After deleting the contract, check if there are any remaining active contracts for this property
+    const remainingActiveContract = await this.prisma.contract.findFirst({
+      where: {
+        propertyId: propertyId,
+        deleted: false,
+        status: {
+          notIn: ['REVOGADO', 'ENCERRADO', 'TERMINATED', 'REVOKED'],
+        },
+      },
+      select: {
+        id: true,
+        dueDay: true,
+        startDate: true,
+        endDate: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    // Get the property with current values
+    const property = await this.prisma.property.findUnique({
+      where: { id: propertyId },
+      select: {
+        id: true,
+        tenantId: true,
+        brokerId: true,
+        nextDueDate: true,
+      },
+    });
+
+    if (property) {
+      let newNextDueDate: Date | null = null;
+
+      // If there's a remaining active contract, set nextDueDate to its end date
+      if (remainingActiveContract) {
+        const endDate = new Date(remainingActiveContract.endDate);
+        // Set nextDueDate to the contract's end date (final payment due date)
+        newNextDueDate = endDate;
+      }
+      // If no active contract remains, clear nextDueDate (set to null)
+
+      // Update property: clear or set nextDueDate and recalculate status
+      const updatedProperty = await this.prisma.property.update({
+        where: { id: propertyId },
+        data: {
+          nextDueDate: newNextDueDate,
+        },
+        select: {
+          id: true,
+          tenantId: true,
+          brokerId: true,
+          nextDueDate: true,
+        },
+      });
+
+      // Recalculate property status based on broker, tenant, nextDueDate and remaining contracts
+      const correctStatus = await this.propertiesService.determinePropertyStatus(
+        propertyId,
+        updatedProperty.tenantId,
+        updatedProperty.brokerId,
+        updatedProperty.nextDueDate
+      );
+
+      // Update property status if it changed
+      await this.prisma.property.update({
+        where: { id: propertyId },
+        data: { status: correctStatus },
+      });
+    }
+
     return { message: 'Contract deleted successfully' };
   }
 
+  /**
+   * Sign a contract (lease contract - Contract model)
+   * 
+   * Access Rules:
+   * - Lease contracts (Contract): Created by Manager/Realtor, involve property owner ↔ tenant
+   * - Property management contracts (ServiceContract): Visible only to Director/Manager, signed only by Director
+   * 
+   * Signature types:
+   * - 'tenant': Tenant signs the lease contract
+   * - 'owner': Property owner signs the lease contract
+   * - 'agency': Agency signs (only AGENCY_ADMIN/AGENCY_MANAGER can sign as agency for lease contracts)
+   * - 'witness': Witness signs
+   */
   async signContract(
     id: string,
     signatureType: 'tenant' | 'owner' | 'agency' | 'witness',
@@ -481,10 +629,11 @@ export class ContractsService {
       witnessDocument?: string;
     },
     userId: string,
+    userRole?: string,
   ) {
     const contract = await this.prisma.contract.findUnique({
       where: { id: BigInt(id) },
-      include: { tenantUser: true, ownerUser: true },
+      include: { tenantUser: true, ownerUser: true, property: true },
     });
 
     if (!contract || contract.deleted) {
@@ -499,11 +648,50 @@ export class ContractsService {
         throw new ForbiddenException('Contract has already been signed by tenant');
       }
     } else if (signatureType === 'owner') {
-      if (contract.ownerId?.toString() !== userId) {
+      // Check if user is the contract owner OR the property owner
+      const isContractOwner = contract.ownerId?.toString() === userId;
+      const isPropertyOwner = contract.property?.ownerId?.toString() === userId;
+      const isPropertyCreator = contract.property?.createdBy?.toString() === userId;
+      
+      // For PROPRIETARIO role, also check if they are the property owner via ownerUser relation
+      let isOwnerViaRelation = false;
+      if (userRole === 'PROPRIETARIO' || userRole === 'INDEPENDENT_OWNER') {
+        isOwnerViaRelation = contract.ownerUser?.id?.toString() === userId;
+      }
+      
+      if (!isContractOwner && !isPropertyOwner && !isPropertyCreator && !isOwnerViaRelation) {
         throw new ForbiddenException('You are not authorized to sign this contract as owner');
       }
       if (contract.ownerSignature) {
         throw new ForbiddenException('Contract has already been signed by owner');
+      }
+    } else if (signatureType === 'agency') {
+      // Only AGENCY_ADMIN or AGENCY_MANAGER can sign as agency for lease contracts
+      // Property management contracts (ServiceContract) are signed only by Director (AGENCY_ADMIN)
+      if (userRole && !['AGENCY_ADMIN', 'AGENCY_MANAGER'].includes(userRole)) {
+        throw new ForbiddenException('Only agency administrators or managers can sign contracts as agency');
+      }
+      if (contract.agencyId && contract.agencyId.toString() !== contract.agencyId?.toString()) {
+        // Verify user belongs to the contract's agency
+        const user = await this.prisma.user.findUnique({
+          where: { id: BigInt(userId) },
+          select: { agencyId: true },
+        });
+        if (user?.agencyId?.toString() !== contract.agencyId.toString()) {
+          throw new ForbiddenException('You are not authorized to sign this contract as agency');
+        }
+      }
+      if (contract.agencySignature) {
+        throw new ForbiddenException('Contract has already been signed by agency');
+      }
+      
+      // Agency can only sign after tenant and owner have signed
+      if (!contract.tenantSignature) {
+        throw new BadRequestException('A imobiliária só pode assinar após o locatário assinar o contrato');
+      }
+      
+      if (!contract.ownerSignature) {
+        throw new BadRequestException('A imobiliária só pode assinar após o proprietário assinar o contrato');
       }
     }
 
@@ -542,11 +730,26 @@ export class ContractsService {
       data: updateData,
     });
 
-    if (signatureType === 'tenant' && updatedContract.tenantSignature) {
+    // Check if all signatures are collected after this signature
+    const allSigned = await this.checkAllSignaturesCollected(BigInt(id));
+    
+    let contractStatusUpdated = false;
+    if (allSigned) {
+      // Update contract status to ASSINADO when all signatures are collected
       await this.prisma.contract.update({
         where: { id: BigInt(id) },
-        data: { status: 'ATIVO' },
+        data: { status: 'ASSINADO' },
       });
+      contractStatusUpdated = true;
+    } else {
+      // For tenant signature, update to ATIVO (legacy behavior)
+      if (signatureType === 'tenant' && updatedContract.tenantSignature) {
+        await this.prisma.contract.update({
+          where: { id: BigInt(id) },
+          data: { status: 'ATIVO' },
+        });
+        contractStatusUpdated = true;
+      }
     }
 
     await this.prisma.contractAudit.create({
@@ -561,6 +764,34 @@ export class ContractsService {
         }),
       },
     });
+
+    // Update property status when contract status changes
+    // Always update property status after any signature to ensure it reflects the current contract state
+    if (updatedContract.propertyId) {
+      try {
+        const property = await this.prisma.property.findUnique({
+          where: { id: updatedContract.propertyId },
+          select: { tenantId: true, brokerId: true, nextDueDate: true },
+        });
+        
+        if (property) {
+          const correctStatus = await this.propertiesService.determinePropertyStatus(
+            updatedContract.propertyId,
+            property.tenantId,
+            property.brokerId,
+            property.nextDueDate
+          );
+          
+          await this.prisma.property.update({
+            where: { id: updatedContract.propertyId },
+            data: { status: correctStatus },
+          });
+        }
+      } catch (error) {
+        // Log error but don't fail the signing operation
+        console.error('Error updating property status in signContract:', error);
+      }
+    }
 
     return this.findOne(id);
   }
@@ -673,6 +904,20 @@ export class ContractsService {
       }));
     }
 
+    // Ensure signature date fields are properly serialized
+    if (contract.tenantSignedAt) {
+      serialized.tenantSignedAt = contract.tenantSignedAt.toISOString();
+    }
+    if (contract.ownerSignedAt) {
+      serialized.ownerSignedAt = contract.ownerSignedAt.toISOString();
+    }
+    if (contract.agencySignedAt) {
+      serialized.agencySignedAt = contract.agencySignedAt.toISOString();
+    }
+    if (contract.witnessSignedAt) {
+      serialized.witnessSignedAt = contract.witnessSignedAt.toISOString();
+    }
+
     return serialized;
   }
 
@@ -713,33 +958,83 @@ export class ContractsService {
       },
     });
 
-    const pdfBuffer = await this.pdfService.generateProvisionalPdf(BigInt(id));
+    // Update property status based on the new contract status
+    if (contract.propertyId) {
+      try {
+        const property = await this.prisma.property.findUnique({
+          where: { id: contract.propertyId },
+          select: {
+            id: true,
+            tenantId: true,
+            brokerId: true,
+            nextDueDate: true,
+          },
+        });
 
-    await this.prisma.contractAudit.create({
-      data: {
-        contractId: BigInt(id),
-        action: 'PREPARE_FOR_SIGNING',
-        performedBy: BigInt(userId),
-        details: JSON.stringify({
-          timestamp: new Date().toISOString(),
-          contractToken,
-        }),
-      },
-    });
+        if (property) {
+          const correctStatus = await this.propertiesService.determinePropertyStatus(
+            contract.propertyId,
+            property.tenantId,
+            property.brokerId,
+            property.nextDueDate
+          );
+
+          await this.prisma.property.update({
+            where: { id: contract.propertyId },
+            data: { status: correctStatus },
+          });
+        }
+      } catch (error) {
+        // Log error but don't fail the entire operation
+        console.error('Error updating property status in prepareForSigning:', error);
+      }
+    }
+
+    let pdfBuffer: Buffer;
+    try {
+      pdfBuffer = await this.pdfService.generateProvisionalPdf(BigInt(id));
+    } catch (error) {
+      console.error('Error generating provisional PDF:', error);
+      throw new BadRequestException(
+        `Erro ao gerar PDF provisório: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
+      );
+    }
+
+    try {
+      await this.prisma.contractAudit.create({
+        data: {
+          contractId: BigInt(id),
+          action: 'PREPARE_FOR_SIGNING',
+          performedBy: BigInt(userId),
+          details: JSON.stringify({
+            timestamp: new Date().toISOString(),
+            contractToken,
+          }),
+        },
+      });
+    } catch (error) {
+      console.error('Error creating contract audit:', error);
+      // Don't fail the operation if audit creation fails
+    }
 
     // Create notification for tenant and owner
     if (contract.ownerId && contract.tenantId && contract.propertyId) {
-      const propertyName = contract.property?.name || contract.property?.address || 'Imóvel';
-      await this.notificationsService.createNotification({
-        description: `Novo contrato enviado para assinatura - ${propertyName}`,
-        ownerId: contract.ownerId,
-        tenantId: contract.tenantId,
-        propertyId: contract.propertyId,
-        agencyId: contract.agencyId || undefined,
-        type: 'contract',
-        recurring: 'once',
-        days: 0,
-      });
+      try {
+        const propertyName = contract.property?.name || contract.property?.address || 'Imóvel';
+        await this.notificationsService.createNotification({
+          description: `Novo contrato enviado para assinatura - ${propertyName}`,
+          ownerId: contract.ownerId,
+          tenantId: contract.tenantId,
+          propertyId: contract.propertyId,
+          agencyId: contract.agencyId || undefined,
+          type: 'contract',
+          recurring: 'once',
+          days: 0,
+        });
+      } catch (error) {
+        console.error('Error creating notification:', error);
+        // Don't fail the operation if notification creation fails
+      }
     }
 
     return {
@@ -789,6 +1084,17 @@ export class ContractsService {
         break;
 
       case 'owner':
+        // Check if user is the contract owner OR the property owner
+        const isContractOwnerGeo = contract.ownerId?.toString() === userId;
+        const isPropertyOwnerGeo = contract.property?.ownerId?.toString() === userId;
+        const isPropertyCreatorGeo = contract.property?.createdBy?.toString() === userId;
+        
+        // For PROPRIETARIO role, also check if they are the property owner via ownerUser relation
+        const isOwnerViaRelationGeo = contract.ownerUser?.id?.toString() === userId;
+        
+        if (!isContractOwnerGeo && !isPropertyOwnerGeo && !isPropertyCreatorGeo && !isOwnerViaRelationGeo) {
+          throw new ForbiddenException('You are not authorized to sign this contract as owner');
+        }
         if (contract.ownerSignature) {
           throw new BadRequestException('Contrato já foi assinado pelo proprietário');
         }
@@ -802,8 +1108,35 @@ export class ContractsService {
         break;
 
       case 'agency':
+        // Only AGENCY_ADMIN or AGENCY_MANAGER can sign as agency for lease contracts
+        // Property management contracts (ServiceContract) are signed only by Director (AGENCY_ADMIN)
+        const user = await this.prisma.user.findUnique({
+          where: { id: BigInt(userId) },
+          select: { role: true, agencyId: true },
+        });
+        
+        if (user && !['AGENCY_ADMIN', 'AGENCY_MANAGER'].includes(user.role)) {
+          throw new ForbiddenException('Only agency administrators or managers can sign contracts as agency');
+        }
+        
+        if (contract.agencyId && user?.agencyId) {
+          // Verify user belongs to the contract's agency
+          if (user.agencyId.toString() !== contract.agencyId.toString()) {
+            throw new ForbiddenException('You are not authorized to sign this contract as agency');
+          }
+        }
+        
         if (contract.agencySignature) {
           throw new BadRequestException('Contrato já foi assinado pela imobiliária');
+        }
+        
+        // Agency can only sign after tenant and owner have signed
+        if (!contract.tenantSignature) {
+          throw new BadRequestException('A imobiliária só pode assinar após o locatário assinar o contrato');
+        }
+        
+        if (!contract.ownerSignature) {
+          throw new BadRequestException('A imobiliária só pode assinar após o proprietário assinar o contrato');
         }
         updateData.agencySignature = signatureData.signature;
         updateData.agencySignedAt = now;
@@ -832,6 +1165,38 @@ export class ContractsService {
       where: { id: BigInt(id) },
       data: updateData,
     });
+
+    // Update property status after each signature (even if not all signatures are collected)
+    if (updatedContract.propertyId) {
+      try {
+        const property = await this.prisma.property.findUnique({
+          where: { id: updatedContract.propertyId },
+          select: {
+            id: true,
+            tenantId: true,
+            brokerId: true,
+            nextDueDate: true,
+          },
+        });
+
+        if (property) {
+          const correctStatus = await this.propertiesService.determinePropertyStatus(
+            updatedContract.propertyId,
+            property.tenantId,
+            property.brokerId,
+            property.nextDueDate
+          );
+
+          await this.prisma.property.update({
+            where: { id: updatedContract.propertyId },
+            data: { status: correctStatus },
+          });
+        }
+      } catch (error) {
+        // Log error but don't fail the signing operation
+        console.error('Error updating property status in signContractWithGeo:', error);
+      }
+    }
 
     await this.prisma.contractAudit.create({
       data: {
@@ -870,9 +1235,216 @@ export class ContractsService {
       });
     }
 
+    // Update contentSnapshot to include all signatures
+    // Fetch the updated contract with all signatures after the update
+    try {
+      const contractWithSignatures = await this.prisma.contract.findUnique({
+        where: { id: BigInt(id) },
+        select: { 
+          contentSnapshot: true,
+          tenantSignature: true,
+          ownerSignature: true,
+          agencySignature: true,
+          witnessSignature: true,
+          templateId: true,
+        },
+      });
+
+      if (contractWithSignatures && contractWithSignatures.contentSnapshot) {
+        let updatedContent = contractWithSignatures.contentSnapshot;
+        let contentChanged = false;
+        
+        // Replace all signature placeholders with actual signature images
+        // Try multiple patterns to match different placeholder formats
+        const signaturePatterns = {
+          owner: [
+            /\[ASSINATURA_LOCADOR\]/gi,
+            /ASSINATURA_LOCADOR/gi,
+            /LOCADOR.*owner.*[-_]{3,}/gi,
+            /LOCADOR:\s*owner\s*[-_]{3,}/gi,
+          ],
+          tenant: [
+            /\[ASSINATURA_LOCATARIO\]/gi,
+            /ASSINATURA_LOCATARIO/gi,
+            /LOCATARIO.*[-_]{3,}/gi,
+            /LOCATARIO:\s*[-_]{3,}/gi,
+          ],
+          agency: [
+            /\[ASSINATURA_IMOBILIARIA\]/gi,
+            /ASSINATURA_IMOBILIARIA/gi,
+            /IMOBILIÁRIA.*DIRECTOR.*[-_]{3,}/gi,
+            /IMOBILIÁRIA:\s*DIRECTOR.*[-_]{3,}/gi,
+          ],
+          witness: [
+            /\[ASSINATURA_TESTEMUNHA\]/gi,
+            /ASSINATURA_TESTEMUNHA/gi,
+            /TESTEMUNHA.*[-_]{3,}/gi,
+          ],
+        };
+        
+        // Check if signatures are already in the content
+        const hasOwnerSignatureInContent = contractWithSignatures.ownerSignature && updatedContent.includes(contractWithSignatures.ownerSignature);
+        const hasTenantSignatureInContent = contractWithSignatures.tenantSignature && updatedContent.includes(contractWithSignatures.tenantSignature);
+        const hasAgencySignatureInContent = contractWithSignatures.agencySignature && updatedContent.includes(contractWithSignatures.agencySignature);
+        const hasWitnessSignatureInContent = contractWithSignatures.witnessSignature && updatedContent.includes(contractWithSignatures.witnessSignature);
+        
+        if (contractWithSignatures.ownerSignature && !hasOwnerSignatureInContent) {
+          const signatureImg = `<img src="${contractWithSignatures.ownerSignature}" alt="Assinatura do Locador" style="max-width: 200px; max-height: 60px; display: block; margin: 0 auto;" />`;
+          for (const pattern of signaturePatterns.owner) {
+            if (pattern.test(updatedContent)) {
+              updatedContent = updatedContent.replace(pattern, signatureImg);
+              contentChanged = true;
+              break;
+            }
+          }
+        }
+        
+        if (contractWithSignatures.tenantSignature && !hasTenantSignatureInContent) {
+          const signatureImg = `<img src="${contractWithSignatures.tenantSignature}" alt="Assinatura do Locatário" style="max-width: 200px; max-height: 60px; display: block; margin: 0 auto;" />`;
+          for (const pattern of signaturePatterns.tenant) {
+            if (pattern.test(updatedContent)) {
+              updatedContent = updatedContent.replace(pattern, signatureImg);
+              contentChanged = true;
+              break;
+            }
+          }
+        }
+        
+        if (contractWithSignatures.agencySignature && !hasAgencySignatureInContent) {
+          const signatureImg = `<img src="${contractWithSignatures.agencySignature}" alt="Assinatura da Imobiliária" style="max-width: 200px; max-height: 60px; display: block; margin: 0 auto;" />`;
+          for (const pattern of signaturePatterns.agency) {
+            if (pattern.test(updatedContent)) {
+              updatedContent = updatedContent.replace(pattern, signatureImg);
+              contentChanged = true;
+              break;
+            }
+          }
+        }
+        
+        if (contractWithSignatures.witnessSignature && !hasWitnessSignatureInContent) {
+          const signatureImg = `<img src="${contractWithSignatures.witnessSignature}" alt="Assinatura da Testemunha" style="max-width: 200px; max-height: 60px; display: block; margin: 0 auto;" />`;
+          for (const pattern of signaturePatterns.witness) {
+            if (pattern.test(updatedContent)) {
+              updatedContent = updatedContent.replace(pattern, signatureImg);
+              contentChanged = true;
+              break;
+            }
+          }
+        }
+        
+        // If no placeholders found, try to insert signatures before signature lines
+        if (!contentChanged && (contractWithSignatures.ownerSignature || contractWithSignatures.tenantSignature || contractWithSignatures.agencySignature)) {
+          let newContent = updatedContent;
+          
+          // Insert owner signature before LOCADOR line (multiple patterns)
+          if (contractWithSignatures.ownerSignature) {
+            const ownerImg = `<img src="${contractWithSignatures.ownerSignature}" alt="Assinatura do Locador" style="max-width: 200px; max-height: 60px; display: block; margin: 0 auto;" />\n`;
+            // Try different patterns for LOCADOR signature line
+            const patterns = [
+              /(LOCADOR:\s*owner\s*[-_]{3,})/gi,
+              /(LOCADOR:\s*[^\n]*[-_]{3,})/gi,
+              /(LOCADOR[^\n]*[-_]{3,})/gi,
+            ];
+            for (const pattern of patterns) {
+              if (pattern.test(newContent) && !newContent.includes(contractWithSignatures.ownerSignature)) {
+                newContent = newContent.replace(pattern, `${ownerImg}$1`);
+                contentChanged = true;
+                break;
+              }
+            }
+          }
+          
+          // Insert agency signature before IMOBILIÁRIA line (multiple patterns)
+          if (contractWithSignatures.agencySignature) {
+            const agencyImg = `<img src="${contractWithSignatures.agencySignature}" alt="Assinatura da Imobiliária" style="max-width: 200px; max-height: 60px; display: block; margin: 0 auto;" />\n`;
+            // Try different patterns for IMOBILIÁRIA signature line
+            const patterns = [
+              /(IMOBILIÁRIA:\s*DIRECTOR[^\n]*[-_]{3,})/gi,
+              /(IMOBILIÁRIA:\s*[^\n]*[-_]{3,})/gi,
+              /(IMOBILIÁRIA[^\n]*[-_]{3,})/gi,
+            ];
+            for (const pattern of patterns) {
+              if (pattern.test(newContent) && !newContent.includes(contractWithSignatures.agencySignature)) {
+                newContent = newContent.replace(pattern, `${agencyImg}$1`);
+                contentChanged = true;
+                break;
+              }
+            }
+          }
+          
+          // Insert tenant signature before LOCATARIO line (multiple patterns)
+          if (contractWithSignatures.tenantSignature) {
+            const tenantImg = `<img src="${contractWithSignatures.tenantSignature}" alt="Assinatura do Locatário" style="max-width: 200px; max-height: 60px; display: block; margin: 0 auto;" />\n`;
+            // Try different patterns for LOCATARIO signature line
+            const patterns = [
+              /(LOCATARIO:\s*[^\n]*[-_]{3,})/gi,
+              /(LOCATARIO[^\n]*[-_]{3,})/gi,
+            ];
+            for (const pattern of patterns) {
+              if (pattern.test(newContent) && !newContent.includes(contractWithSignatures.tenantSignature)) {
+                newContent = newContent.replace(pattern, `${tenantImg}$1`);
+                contentChanged = true;
+                break;
+              }
+            }
+          }
+          
+          if (contentChanged) {
+            updatedContent = newContent;
+          }
+        }
+        
+        // Update contentSnapshot if content changed
+        if (contentChanged) {
+          await this.prisma.contract.update({
+            where: { id: BigInt(id) },
+            data: {
+              contentSnapshot: updatedContent,
+            },
+          });
+        }
+      }
+    } catch (error) {
+      // Log error but don't fail the signing process
+      console.error('Error updating contentSnapshot after signature:', error);
+    }
+
     const allSigned = await this.checkAllSignaturesCollected(BigInt(id));
     if (allSigned) {
       await this.finalizeContract(id, userId);
+    } else {
+      // Update property status even if not all signatures are collected yet
+      // This ensures property status is updated after each signature
+      if (updatedContract.propertyId) {
+        try {
+          const property = await this.prisma.property.findUnique({
+            where: { id: updatedContract.propertyId },
+            select: {
+              id: true,
+              tenantId: true,
+              brokerId: true,
+              nextDueDate: true,
+            },
+          });
+
+          if (property) {
+            const correctStatus = await this.propertiesService.determinePropertyStatus(
+              updatedContract.propertyId,
+              property.tenantId,
+              property.brokerId,
+              property.nextDueDate
+            );
+
+            await this.prisma.property.update({
+              where: { id: updatedContract.propertyId },
+              data: { status: correctStatus },
+            });
+          }
+        } catch (error) {
+          // Log error but don't fail the signing operation
+          console.error('Error updating property status in signContractWithGeo (after checkAllSignaturesCollected):', error);
+        }
+      }
     }
 
     return this.findOne(id);
@@ -902,6 +1474,7 @@ export class ContractsService {
   async finalizeContract(id: string, userId: string) {
     const contract = await this.prisma.contract.findUnique({
       where: { id: BigInt(id) },
+      include: { property: true },
     });
 
     if (!contract || contract.deleted) {
@@ -926,6 +1499,38 @@ export class ContractsService {
         }),
       },
     });
+
+    // Update property status to ALUGADO when contract is fully signed
+    if (contract.propertyId) {
+      try {
+        const property = await this.prisma.property.findUnique({
+          where: { id: contract.propertyId },
+          select: {
+            id: true,
+            tenantId: true,
+            brokerId: true,
+            nextDueDate: true,
+          },
+        });
+
+        if (property) {
+          const correctStatus = await this.propertiesService.determinePropertyStatus(
+            contract.propertyId,
+            property.tenantId,
+            property.brokerId,
+            property.nextDueDate
+          );
+
+          await this.prisma.property.update({
+            where: { id: contract.propertyId },
+            data: { status: correctStatus },
+          });
+        }
+      } catch (error) {
+        // Log error but don't fail the operation
+        console.error('Error updating property status in finalizeContract:', error);
+      }
+    }
 
     return {
       message: 'Contrato finalizado com sucesso',

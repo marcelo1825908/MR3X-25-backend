@@ -19,6 +19,7 @@ interface ContractData {
   dueDay: number | null;
   description: string | null;
   clauses: any;
+  hashFinal?: string;
   tenant: {
     name: string;
     document: string;
@@ -127,6 +128,14 @@ export class ContractPdfService {
       throw new NotFoundException('Contrato não encontrado');
     }
 
+    if (!contract.tenantUser) {
+      throw new NotFoundException('Inquilino não encontrado para este contrato');
+    }
+
+    if (!contract.property) {
+      throw new NotFoundException('Imóvel não encontrado para este contrato');
+    }
+
     return {
       id: contract.id.toString(),
       token: contract.contractToken || this.generateContractToken(),
@@ -138,10 +147,11 @@ export class ContractPdfService {
       dueDay: contract.dueDay,
       description: contract.description,
       clauses: contract.clausesSnapshot || {},
+      hashFinal: contract.hashFinal || undefined,
       tenant: {
         name: contract.tenantUser.name || 'N/A',
         document: contract.tenantUser.document || 'N/A',
-        email: contract.tenantUser.email,
+        email: contract.tenantUser.email || 'N/A',
         address: `${contract.tenantUser.address || ''}, ${contract.tenantUser.neighborhood || ''} - ${contract.tenantUser.city || ''}, ${contract.tenantUser.state || ''}`,
       },
       owner: {
@@ -153,10 +163,10 @@ export class ContractPdfService {
           : 'N/A',
       },
       property: {
-        address: contract.property.address,
-        city: contract.property.city,
-        neighborhood: contract.property.neighborhood,
-        cep: contract.property.cep,
+        address: contract.property.address || 'N/A',
+        city: contract.property.city || 'N/A',
+        neighborhood: contract.property.neighborhood || 'N/A',
+        cep: contract.property.cep || 'N/A',
       },
       agency: contract.agency
         ? {
@@ -232,10 +242,19 @@ export class ContractPdfService {
     const data = await this.getContractData(contractId);
     const html = await this.renderHtmlTemplate(data, true);
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
+    let browser;
+    try {
+      browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      });
+    } catch (error) {
+      console.error('Error launching Puppeteer browser:', error);
+      throw new Error(
+        `Erro ao iniciar o navegador para gerar PDF. ` +
+        `Certifique-se de que o Chrome está instalado executando: npx puppeteer browsers install chrome`
+      );
+    }
 
     try {
       const page = await browser.newPage();
@@ -281,10 +300,19 @@ export class ContractPdfService {
     const data = await this.getContractData(contractId);
     const html = await this.renderHtmlTemplate(data, false);
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
+    let browser;
+    try {
+      browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      });
+    } catch (error) {
+      console.error('Error launching Puppeteer browser:', error);
+      throw new Error(
+        `Erro ao iniciar o navegador para gerar PDF. ` +
+        `Certifique-se de que o Chrome está instalado executando: npx puppeteer browsers install chrome`
+      );
+    }
 
     try {
       const page = await browser.newPage();
@@ -683,7 +711,7 @@ export class ContractPdfService {
     ${data.clauses && Object.keys(data.clauses).length > 0 ? `
     <div class="section clauses">
       <h2 class="section-title">CLÁUSULAS E CONDIÇÕES</h2>
-      ${this.renderClauses(data.clauses)}
+      ${this.renderClauses(data.clauses, data)}
     </div>
     ` : `
     <div class="section clauses">
@@ -707,6 +735,16 @@ export class ContractPdfService {
     </div>
     `}
 
+    <div class="section">
+      <div class="legal-disclaimer" style="background: #f5f5f5; border-left: 4px solid #666; padding: 12px 15px; font-style: italic; margin: 15px 0; font-size: 9pt;">
+        <p><strong>AVISO LEGAL - ASSINATURA ELETRÔNICA:</strong></p>
+        <p>Este contrato foi executado eletronicamente nos termos do Artigo 10 da Medida Provisória nº 2.200-2, de 24 de agosto de 2001.</p>
+        <p><strong>Tipo de Assinatura:</strong> Assinatura Eletrônica Simples (conforme MP 2.200-2/2001, Art. 10, § 2º)</p>
+        <p><strong>Método de Assinatura:</strong> Assinatura digitalizada com registro de data, hora, endereço IP, geolocalização e consentimento expresso das partes.</p>
+        <p style="margin-top: 8px;"><strong>MR3X é uma plataforma de tecnologia para gestão de aluguéis e não presta serviços jurídicos, advocatícios ou de intermediação judicial.</strong></p>
+      </div>
+    </div>
+
     <div class="signatures">
       <h2 class="section-title">ASSINATURAS</h2>
 
@@ -723,8 +761,9 @@ export class ContractPdfService {
             ${data.signatures?.owner ? `
             <p class="signature-meta">
               Assinado em: ${new Date(data.signatures.owner.signedAt).toLocaleString('pt-BR')}<br>
-              IP: ${data.signatures.owner.ip}
-              ${data.signatures.owner.lat ? `<br>Geo: ${data.signatures.owner.lat.toFixed(6)}, ${data.signatures.owner.lng?.toFixed(6)}` : ''}
+              IP: ${data.signatures.owner.ip}<br>
+              ${data.signatures.owner.lat ? `Geo: ${data.signatures.owner.lat.toFixed(6)}, ${data.signatures.owner.lng?.toFixed(6)}<br>` : ''}
+              ${data.hashFinal ? `Hash: ${data.hashFinal.substring(0, 16)}...` : ''}
             </p>
             ` : ''}
           </div>
@@ -741,8 +780,9 @@ export class ContractPdfService {
             ${data.signatures?.tenant ? `
             <p class="signature-meta">
               Assinado em: ${new Date(data.signatures.tenant.signedAt).toLocaleString('pt-BR')}<br>
-              IP: ${data.signatures.tenant.ip}
-              ${data.signatures.tenant.lat ? `<br>Geo: ${data.signatures.tenant.lat.toFixed(6)}, ${data.signatures.tenant.lng?.toFixed(6)}` : ''}
+              IP: ${data.signatures.tenant.ip}<br>
+              ${data.signatures.tenant.lat ? `Geo: ${data.signatures.tenant.lat.toFixed(6)}, ${data.signatures.tenant.lng?.toFixed(6)}<br>` : ''}
+              ${data.hashFinal ? `Hash: ${data.hashFinal.substring(0, 16)}...` : ''}
             </p>
             ` : ''}
           </div>
@@ -763,8 +803,9 @@ export class ContractPdfService {
             ${data.signatures?.agency ? `
             <p class="signature-meta">
               Assinado em: ${new Date(data.signatures.agency.signedAt).toLocaleString('pt-BR')}<br>
-              IP: ${data.signatures.agency.ip}
-              ${data.signatures.agency.lat ? `<br>Geo: ${data.signatures.agency.lat.toFixed(6)}, ${data.signatures.agency.lng?.toFixed(6)}` : ''}
+              IP: ${data.signatures.agency.ip}<br>
+              ${data.signatures.agency.lat ? `Geo: ${data.signatures.agency.lat.toFixed(6)}, ${data.signatures.agency.lng?.toFixed(6)}<br>` : ''}
+              ${data.hashFinal ? `Hash: ${data.hashFinal.substring(0, 16)}...` : ''}
             </p>
             ` : ''}
           </div>
@@ -794,7 +835,8 @@ export class ContractPdfService {
       <p><strong>Token:</strong> ${data.token}</p>
       <p><strong>Gerado em:</strong> ${data.generatedAt}</p>
       <p><strong>Verificação:</strong> ${data.verificationUrl}</p>
-      ${!data.isProvisional ? `<p class="hash"><strong>Hash SHA-256:</strong> Este hash será calculado após a geração final do documento</p>` : ''}
+      ${!data.isProvisional && data.hashFinal ? `<p class="hash"><strong>Hash SHA-256:</strong> ${data.hashFinal}</p>` : !data.isProvisional ? `<p class="hash"><strong>Hash SHA-256:</strong> Calculado após geração final</p>` : ''}
+      <p style="margin-top: 4px; font-size: 5pt; color: #999;"><strong>MR3X é uma plataforma de tecnologia para gestão de aluguéis e não presta serviços jurídicos, advocatícios ou de intermediação judicial.</strong></p>
     </div>
   </div>
 </body>
@@ -817,7 +859,7 @@ export class ContractPdfService {
     return `${months} mês${months > 1 ? 'es' : ''}`;
   }
 
-  private renderClauses(clauses: any): string {
+  private renderClauses(clauses: any, data: ContractData): string {
     if (!clauses || typeof clauses !== 'object') {
       return '';
     }
@@ -827,10 +869,12 @@ export class ContractPdfService {
 
     for (const [key, value] of Object.entries(clauses)) {
       if (typeof value === 'string') {
+        // Replace any remaining template variables in clause content
+        const processedValue = this.replaceTemplateVariables(value, data);
         html += `
           <div class="clause">
             <p class="clause-title">CLÁUSULA ${this.toRoman(clauseNumber)} - ${key.toUpperCase()}</p>
-            <p>${value}</p>
+            <p>${processedValue}</p>
           </div>
         `;
         clauseNumber++;
@@ -838,6 +882,60 @@ export class ContractPdfService {
     }
 
     return html;
+  }
+
+  private replaceTemplateVariables(content: string, data: ContractData): string {
+    if (!content || typeof content !== 'string') {
+      return content;
+    }
+
+    let processed = content;
+
+    // Replace common template variables
+    const replacements: Record<string, string> = {
+      '[NOME_CORRETOR]': data.agency?.name || '',
+      '[CRECI_CORRETOR]': '', // CRECI should be stored in contract data if needed
+      '[NOME_LOCADOR]': data.owner.name,
+      '[LOCADOR_NOME]': data.owner.name,
+      '[CPF_LOCADOR]': data.owner.document,
+      '[LOCADOR_CPF]': data.owner.document,
+      '[ENDERECO_LOCADOR]': data.owner.address,
+      '[LOCADOR_ENDERECO]': data.owner.address,
+      '[EMAIL_LOCADOR]': data.owner.email,
+      '[LOCADOR_EMAIL]': data.owner.email,
+      '[NOME_LOCATARIO]': data.tenant.name,
+      '[LOCATARIO_NOME]': data.tenant.name,
+      '[CPF_LOCATARIO]': data.tenant.document,
+      '[LOCATARIO_CPF]': data.tenant.document,
+      '[ENDERECO_LOCATARIO]': data.tenant.address,
+      '[LOCATARIO_ENDERECO]': data.tenant.address,
+      '[EMAIL_LOCATARIO]': data.tenant.email,
+      '[LOCATARIO_EMAIL]': data.tenant.email,
+      '[ENDERECO_IMOVEL]': `${data.property.address}, ${data.property.neighborhood}, ${data.property.city}`,
+      '[IMOVEL_ENDERECO]': `${data.property.address}, ${data.property.neighborhood}, ${data.property.city}`,
+      '[CIDADE]': data.property.city,
+      '[FORO]': data.property.city,
+      '[COMARCA]': data.property.city,
+      '[FORO_CIDADE_ESTADO]': `${data.property.city} - [ESTADO]`,
+      '[VALOR_ALUGUEL]': data.monthlyRent.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+      '[ALUGUEL]': data.monthlyRent.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+      '[CAUCAO]': data.deposit?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) || 'N/A',
+      '[DIA_VENCIMENTO]': data.dueDay?.toString() || '5',
+      '[DATA_INICIO]': data.startDate.toLocaleDateString('pt-BR'),
+      '[DATA_FIM]': data.endDate.toLocaleDateString('pt-BR'),
+      '[DATA_ATUAL]': new Date().toLocaleDateString('pt-BR'),
+      '[ANO_ATUAL]': new Date().getFullYear().toString(),
+    };
+
+    // Replace all template variables
+    for (const [placeholder, replacement] of Object.entries(replacements)) {
+      processed = processed.replace(new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), replacement || placeholder);
+    }
+
+    // Remove any remaining [VARIABLE] patterns that weren't replaced (to avoid showing placeholders)
+    processed = processed.replace(/\[[A-Z_0-9]+\]/g, '[NÃO DISPONÍVEL]');
+
+    return processed;
   }
 
   private toRoman(num: number): string {

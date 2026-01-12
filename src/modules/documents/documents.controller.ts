@@ -5,9 +5,10 @@ import {
   Res,
   UseGuards,
   Param,
+  Req,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 import { DocumentsService } from './documents.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
@@ -20,8 +21,22 @@ export class DocumentsController {
 
   @Post('receipt')
   @ApiOperation({ summary: 'Generate a payment receipt PDF' })
-  async generateReceipt(@Body() data: any, @Res() res: Response) {
-    const pdfBuffer = await this.documentsService.generateReceipt(data);
+  async generateReceipt(@Body() data: any, @Req() req: Request, @Res() res: Response) {
+    // Extract client IP
+    const clientIP = req.ip || 
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      (req.headers['x-real-ip'] as string) ||
+      req.socket.remoteAddress ||
+      'N/A';
+
+    // Add metadata to receipt data
+    const receiptDataWithMetadata = {
+      ...data,
+      ip: clientIP,
+      generatedAt: new Date().toISOString(),
+    };
+
+    const pdfBuffer = await this.documentsService.generateReceipt(receiptDataWithMetadata);
 
     res.set({
       'Content-Type': 'application/pdf',

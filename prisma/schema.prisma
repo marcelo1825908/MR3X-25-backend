@@ -149,6 +149,7 @@ model Agency {
   serviceContracts  ServiceContract[]
   microtransactions Microtransaction[]
   usageRecords      UsageRecord[]
+  supportTickets    SupportTicket[]
 
   @@map("agencies")
 }
@@ -206,6 +207,12 @@ model User {
   isFrozen                Boolean   @default(false) @map("is_frozen")
   frozenAt                DateTime? @map("frozen_at") @db.Timestamp(0)
   frozenReason            String?   @map("frozen_reason") @db.VarChar(255)
+  
+  // Two-Factor Authentication (2FA)
+  twoFactorEnabled        Boolean   @default(false) @map("two_factor_enabled")
+  twoFactorSecret         String?   @map("two_factor_secret") @db.VarChar(255)
+  twoFactorBackupCodes    Json?     @map("two_factor_backup_codes")
+  
   createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
 
   owner               User?                @relation("UserOwner", fields: [ownerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -276,10 +283,13 @@ model User {
   salesMessageReplies   SalesMessageReply[] @relation("SalesMessageReplySender")
   salesNotifications    SalesNotification[] @relation("SalesNotificationUser")
 
+  salesLeads       SalesLead[]       @relation("SalesRepLeads")
   salesProspects   SalesProspect[]   @relation("SalesRepProspects")
   salesProposals   SalesProposal[]   @relation("SalesRepProposals")
   salesCommissions SalesCommission[] @relation("SalesRepCommissions")
+  approvedCommissions SalesCommission[] @relation("SalesCommissionApprover")
   salesActivities  SalesActivity[]   @relation("SalesRepActivities")
+  salesLeadActivities SalesLeadActivity[] @relation("SalesLeadActivityCreator")
   salesGoals       SalesGoal[]       @relation("SalesRepGoals")
 
   tenantAnalysesRequested TenantAnalysis[] @relation("TenantAnalysisRequestedBy")
@@ -289,6 +299,12 @@ model User {
   serviceContractsAsOwner ServiceContract[] @relation("ServiceContractOwner")
 
   microtransactions Microtransaction[]
+
+  // Support Ticket relations
+  requestedTickets SupportTicket[] @relation("TicketRequester")
+  assignedTickets SupportTicket[] @relation("TicketAssignee")
+  ticketMessages SupportTicketMessage[] @relation("TicketMessageAuthor")
+  ticketAttachments SupportTicketAttachment[] @relation("TicketAttachmentUploader")
 
   @@map("users")
 }
@@ -371,6 +387,20 @@ model Property {
   condominiumName    String?   @map("condominium_name") @db.VarChar(255)
   condominiumFee     Decimal?  @map("condominium_fee") @db.Decimal(12, 2)
   iptuValue          Decimal?  @map("iptu_value") @db.Decimal(12, 2)
+
+  // Property Classification (Mandatory for legal validity)
+  propertyType       String?   @map("property_type") @db.VarChar(20) // 'URBAN' or 'RURAL'
+  useType            String?   @map("use_type") @db.VarChar(20) // 'RESIDENTIAL' or 'COMMERCIAL'
+  
+  // Rural Property Specific Fields
+  totalAreaHectares  Decimal?  @map("total_area_hectares") @db.Decimal(10, 2)
+  productiveArea     Decimal?  @map("productive_area") @db.Decimal(10, 2)
+  propertyRegistry   String?   @map("property_registry") @db.VarChar(100) // Land title number
+  ccirNumber         String?   @map("ccir_number") @db.VarChar(50) // INCRA registration
+  carNumber          String?   @map("car_number") @db.VarChar(50) // Rural Environmental Registry
+  itrValue           Decimal?  @map("itr_value") @db.Decimal(12, 2) // Rural Land Tax
+  georeferencing     String?   @map("georeferencing") @db.Text // Georeferencing data
+  intendedUse        String?   @map("intended_use") @db.VarChar(50) // 'AGRICULTURAL', 'LIVESTOCK', 'MIXED'
 
   owner         User?   @relation("PropertyOwner", fields: [ownerId], references: [id])
   agency        Agency? @relation(fields: [agencyId], references: [id])
@@ -1053,6 +1083,8 @@ model Agreement {
   originalAmount   Decimal? @map("original_amount") @db.Decimal(12, 2)
   negotiatedAmount Decimal? @map("negotiated_amount") @db.Decimal(12, 2)
   fineAmount       Decimal? @map("fine_amount") @db.Decimal(12, 2)
+  interestPercent  Decimal? @map("interest_percent") @db.Decimal(5, 2)
+  interestAmount   Decimal? @map("interest_amount") @db.Decimal(12, 2)
   discountAmount   Decimal? @map("discount_amount") @db.Decimal(12, 2)
   installments     Int?     @map("installments")
   installmentValue Decimal? @map("installment_value") @db.Decimal(12, 2)
@@ -1172,10 +1204,61 @@ model SalesNotification {
   @@map("sales_notifications")
 }
 
+model SalesLead {
+  id             BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  token          String    @unique @db.VarChar(50)
+  salesRepId     BigInt    @map("sales_rep_id") @db.UnsignedBigInt
+  companyName    String?   @map("company_name") @db.VarChar(255)
+  contactName    String    @map("contact_name") @db.VarChar(255)
+  contactEmail   String    @map("contact_email") @db.VarChar(191)
+  contactPhone   String?   @map("contact_phone") @db.VarChar(30)
+  city           String?   @db.VarChar(100)
+  state          String?   @db.VarChar(10)
+  source         String    @default("Manual") @db.VarChar(50) // 'form', 'referral', 'campaign', 'Manual'
+  status         String    @default("new") @db.VarChar(30) // 'new', 'contacted', 'proposal_sent', 'converted', 'lost'
+  planInterest   String?   @map("plan_interest") @db.VarChar(30)
+  notes          String?   @db.Text
+  lastContactAt  DateTime? @map("last_contact_at") @db.Timestamp(0)
+  convertedAt    DateTime? @map("converted_at") @db.Timestamp(0)
+  convertedToProspectId BigInt? @unique @map("converted_to_prospect_id") @db.UnsignedBigInt
+  convertedToAgencyId   BigInt? @map("converted_to_agency_id") @db.UnsignedBigInt
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  salesRep   User            @relation("SalesRepLeads", fields: [salesRepId], references: [id])
+  activities SalesLeadActivity[]
+  prospect   SalesProspect?   @relation("LeadToProspect")
+
+  @@index([salesRepId])
+  @@index([status])
+  @@index([source])
+  @@index([token])
+  @@map("sales_leads")
+}
+
+model SalesLeadActivity {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  leadId      BigInt   @map("lead_id") @db.UnsignedBigInt
+  type        String   @db.VarChar(50) // 'status_change', 'note', 'proposal_sent', 'call', 'meeting', 'conversion'
+  title       String   @db.VarChar(255)
+  description String?  @db.Text
+  createdBy   BigInt   @map("created_by") @db.UnsignedBigInt
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+
+  lead     SalesLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  creator  User      @relation("SalesLeadActivityCreator", fields: [createdBy], references: [id])
+
+  @@index([leadId])
+  @@index([createdBy])
+  @@map("sales_lead_activities")
+}
+
 model SalesProspect {
   id             BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
   salesRepId     BigInt    @map("sales_rep_id") @db.UnsignedBigInt
+  leadId         BigInt?   @unique @map("lead_id") @db.UnsignedBigInt
   name           String    @db.VarChar(255)
+  type           String    @default("agency") @db.VarChar(30) // 'agency', 'independent_owner'
   contactName    String    @map("contact_name") @db.VarChar(255)
   contactEmail   String    @map("contact_email") @db.VarChar(191)
   contactPhone   String?   @map("contact_phone") @db.VarChar(30)
@@ -1195,17 +1278,21 @@ model SalesProspect {
   nextAction     String?   @map("next_action") @db.VarChar(255)
   nextActionDate DateTime? @map("next_action_date") @db.Date
   convertedAt    DateTime? @map("converted_at") @db.Timestamp(0)
+  convertedToAgencyId BigInt? @map("converted_to_agency_id") @db.UnsignedBigInt
   lostAt         DateTime? @map("lost_at") @db.Timestamp(0)
   lostReason     String?   @map("lost_reason") @db.Text
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
   updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
 
   salesRep   User            @relation("SalesRepProspects", fields: [salesRepId], references: [id])
+  lead       SalesLead?      @relation("LeadToProspect", fields: [leadId], references: [id])
   proposals  SalesProposal[]
   activities SalesActivity[]
 
   @@index([salesRepId])
   @@index([status])
+  @@index([type])
+  @@index([leadId])
   @@map("sales_prospects")
 }
 
@@ -1249,20 +1336,29 @@ model SalesCommission {
   dealValue       Decimal   @map("deal_value") @db.Decimal(12, 2)
   commissionRate  Decimal   @map("commission_rate") @db.Decimal(5, 2)
   commissionValue Decimal   @map("commission_value") @db.Decimal(12, 2)
-  status          String    @default("pending") @db.VarChar(30)
+  status          String    @default("pending") @db.VarChar(30) // 'pending', 'approved', 'paid', 'rejected'
+  approvedBy      BigInt?   @map("approved_by") @db.UnsignedBigInt
+  approvedAt      DateTime? @map("approved_at") @db.Timestamp(0)
   closedAt        DateTime  @map("closed_at") @db.Timestamp(0)
   paidAt          DateTime? @map("paid_at") @db.Timestamp(0)
   paymentMonth    String?   @map("payment_month") @db.VarChar(7)
+  // Asaas payment split information
+  asaasPaymentId  String?   @map("asaas_payment_id") @db.VarChar(100)
+  asaasSplitId    String?   @map("asaas_split_id") @db.VarChar(100)
+  platformFee     Decimal?  @map("platform_fee") @db.Decimal(12, 2) // Platform percentage
+  representativeFee Decimal? @map("representative_fee") @db.Decimal(12, 2) // Representative percentage
   notes           String?   @db.Text
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
 
   salesRep User           @relation("SalesRepCommissions", fields: [salesRepId], references: [id])
   proposal SalesProposal? @relation(fields: [proposalId], references: [id])
+  approver User?          @relation("SalesCommissionApprover", fields: [approvedBy], references: [id])
 
   @@index([salesRepId])
   @@index([status])
   @@index([paymentMonth])
+  @@index([asaasPaymentId])
   @@map("sales_commissions")
 }
 
@@ -1763,6 +1859,8 @@ model ExtrajudicialNotification {
   interestAmount   Decimal? @map("interest_amount") @db.Decimal(12, 2)
   correctionAmount Decimal? @map("correction_amount") @db.Decimal(12, 2)
   lawyerFees       Decimal? @map("lawyer_fees") @db.Decimal(12, 2)
+  attorneyName     String?  @map("attorney_name") @db.VarChar(255)
+  attorneyOAB      String?  @map("attorney_oab") @db.VarChar(50)
   totalAmount      Decimal  @map("total_amount") @db.Decimal(12, 2)
 
   deadlineDays    Int      @map("deadline_days")
@@ -2311,4 +2409,169 @@ model FeatureLimit {
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
 
   @@map("feature_limits")
+}
+
+model ApiConsumption {
+  id              BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  provider        String   @db.VarChar(50) // 'CELLERE' or 'INFOSIMPLES'
+  balance         Decimal? @db.Decimal(10, 2)
+  dailyConsumption Decimal? @default(0) @map("daily_consumption") @db.Decimal(10, 2)
+  monthlyConsumption Decimal? @default(0) @map("monthly_consumption") @db.Decimal(10, 2)
+  units           String?  @db.VarChar(50) // 'credit' or other unit type
+  recordDate      DateTime @map("record_date") @db.Date
+  metadata        String?  @db.Text // JSON for additional data
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  @@unique([provider, recordDate])
+  @@map("api_consumption")
+}
+
+// Support Ticket System
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_CUSTOMER
+  RESOLVED
+  CLOSED
+  CANCELLED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketCategory {
+  TECHNICAL
+  BILLING
+  ACCOUNT
+  FEATURE_REQUEST
+  BUG_REPORT
+  OTHER
+}
+
+model SupportTicket {
+  id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+  
+  // Unique token format: MR3X-TKT-2025-XXX-XXX
+  token String @unique @db.VarChar(50)
+  
+  // Requester information
+  requesterId BigInt @map("requester_id") @db.UnsignedBigInt
+  requesterName String @map("requester_name") @db.VarChar(255)
+  requesterEmail String @map("requester_email") @db.VarChar(191)
+  requesterRole String? @map("requester_role") @db.VarChar(50)
+  agencyId BigInt? @map("agency_id") @db.UnsignedBigInt
+  
+  // Ticket details
+  subject String @db.VarChar(500)
+  category TicketCategory @default(OTHER)
+  priority TicketPriority @default(MEDIUM)
+  status TicketStatus @default(OPEN)
+  
+  // Initial description
+  description String @db.Text
+  
+  // Assignment
+  assignedToId BigInt? @map("assigned_to_id") @db.UnsignedBigInt
+  assignedAt DateTime? @map("assigned_at") @db.Timestamp(0)
+  
+  // Resolution
+  resolvedAt DateTime? @map("resolved_at") @db.Timestamp(0)
+  resolvedBy BigInt? @map("resolved_by") @db.UnsignedBigInt
+  resolutionNotes String? @map("resolution_notes") @db.Text
+  
+  // Closure
+  closedAt DateTime? @map("closed_at") @db.Timestamp(0)
+  closedBy BigInt? @map("closed_by") @db.UnsignedBigInt
+  closureReason String? @map("closure_reason") @db.VarChar(255)
+  
+  // Tracking
+  firstResponseAt DateTime? @map("first_response_at") @db.Timestamp(0)
+  lastActivityAt DateTime @default(now()) @map("last_activity_at") @db.Timestamp(0)
+  
+  // Metadata
+  tags String? @db.Text // JSON array of tags
+  internalNotes String? @map("internal_notes") @db.Text
+  
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  
+  // Relations
+  requester User @relation("TicketRequester", fields: [requesterId], references: [id])
+  assignedTo User? @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  agency Agency? @relation(fields: [agencyId], references: [id])
+  messages SupportTicketMessage[]
+  attachments SupportTicketAttachment[]
+  
+  @@index([requesterId])
+  @@index([assignedToId])
+  @@index([agencyId])
+  @@index([status])
+  @@index([priority])
+  @@index([category])
+  @@index([token])
+  @@index([createdAt])
+  @@map("support_tickets")
+}
+
+model SupportTicketMessage {
+  id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+  
+  ticketId BigInt @map("ticket_id") @db.UnsignedBigInt
+  
+  // Message author
+  authorId BigInt @map("author_id") @db.UnsignedBigInt
+  authorName String @map("author_name") @db.VarChar(255)
+  authorRole String? @map("author_role") @db.VarChar(50)
+  isInternal Boolean @default(false) @map("is_internal") // Internal notes vs customer-visible
+  
+  // Message content
+  content String @db.Text
+  
+  // Metadata
+  ipAddress String? @map("ip_address") @db.VarChar(45)
+  userAgent String? @map("user_agent") @db.VarChar(500)
+  
+  // Immutable - no deletion allowed
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  
+  // Relations
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User @relation("TicketMessageAuthor", fields: [authorId], references: [id])
+  attachments SupportTicketAttachment[]
+  
+  @@index([ticketId])
+  @@index([authorId])
+  @@index([createdAt])
+  @@map("support_ticket_messages")
+}
+
+model SupportTicketAttachment {
+  id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+  
+  ticketId BigInt @map("ticket_id") @db.UnsignedBigInt
+  messageId BigInt? @map("message_id") @db.UnsignedBigInt
+  
+  // File information
+  fileName String @map("file_name") @db.VarChar(255)
+  filePath String @map("file_path") @db.VarChar(500)
+  fileSize BigInt @map("file_size") @db.UnsignedBigInt
+  mimeType String? @map("mime_type") @db.VarChar(100)
+  
+  // Upload metadata
+  uploadedById BigInt @map("uploaded_by_id") @db.UnsignedBigInt
+  uploadedAt DateTime @default(now()) @map("uploaded_at") @db.Timestamp(0)
+  
+  // Relations
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  message SupportTicketMessage? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  uploadedBy User @relation("TicketAttachmentUploader", fields: [uploadedById], references: [id])
+  
+  @@index([ticketId])
+  @@index([messageId])
+  @@map("support_ticket_attachments")
 }

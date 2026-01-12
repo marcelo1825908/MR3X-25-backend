@@ -89,7 +89,7 @@ export class SplitConfigurationController {
   }
 
   @Get('active')
-  @ApiOperation({ summary: 'Get active configuration for entity' })
+  @ApiOperation({ summary: 'Obter configuração ativa para entidade' })
   @ApiQuery({ name: 'agencyId', required: false, type: String })
   @ApiQuery({ name: 'ownerId', required: false, type: String })
   @ApiQuery({ name: 'contractId', required: false, type: String })
@@ -120,7 +120,7 @@ export class SplitConfigurationController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get split configuration by ID' })
+  @ApiOperation({ summary: 'Obter configuração de divisão por ID' })
   @Roles('CEO', 'ADMIN', 'AGENCY_ADMIN', 'AGENCY_MANAGER', 'INDEPENDENT_OWNER', 'PROPRIETARIO')
   async findOne(@Param('id') id: string) {
     return this.splitConfigService.findOne(id);
@@ -140,7 +140,7 @@ export class SplitConfigurationController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create a new split configuration' })
+  @ApiOperation({ summary: 'Criar nova configuração de divisão' })
   @Roles('CEO', 'ADMIN', 'AGENCY_ADMIN', 'INDEPENDENT_OWNER')
   async create(
     @Body() data: CreateSplitConfigurationDto,
@@ -157,7 +157,7 @@ export class SplitConfigurationController {
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Update split configuration' })
+  @ApiOperation({ summary: 'Atualizar configuração de divisão' })
   @Roles('CEO', 'ADMIN', 'AGENCY_ADMIN', 'INDEPENDENT_OWNER')
   async update(
     @Param('id') id: string,
@@ -168,7 +168,7 @@ export class SplitConfigurationController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete split configuration' })
+  @ApiOperation({ summary: 'Excluir configuração de divisão' })
   @Roles('CEO', 'ADMIN', 'AGENCY_ADMIN', 'INDEPENDENT_OWNER')
   async delete(
     @Param('id') id: string,

@@ -4,6 +4,7 @@ import { PlansService } from '../plans/plans.service';
 import { PlanEnforcementService, PLAN_MESSAGES } from '../plans/plan-enforcement.service';
 import { TokenGeneratorService, TokenEntityType } from '../common/services/token-generator.service';
 import { CreateUserDto, UpdateUserDto, CreateTenantDto, UpdateTenantDto, UpdateProfileDto } from './dto/user.dto';
+import { DocumentValidationService } from './services/document-validation.service';
 import * as bcrypt from 'bcryptjs';
 import { UserRole } from '@prisma/client';
 import * as fs from 'fs';
@@ -32,6 +33,7 @@ export class UsersService {
     private plansService: PlansService,
     private planEnforcement: PlanEnforcementService,
     private tokenGenerator: TokenGeneratorService,
+    private documentValidation: DocumentValidationService,
   ) {}
 
   validateRoleCreation(creatorRole: UserRole, targetRole: UserRole): void {
@@ -362,6 +364,18 @@ export class UsersService {
       throw new ConflictException('Email already registered');
     }
 
+    // Validate document (CPF or CNPJ) - supports alphanumeric CNPJ from Jan 2026
+    if (dto.document) {
+      const validation = this.documentValidation.validateDocument(dto.document);
+      if (!validation.valid) {
+        throw new BadRequestException(validation.message || 'Documento inválido');
+      }
+      // For CNPJ (especially alphanumeric), require email or SMS confirmation for billing
+      if (validation.type === 'CNPJ' && (!dto.email && !dto.phone)) {
+        throw new BadRequestException('Para CNPJ, é obrigatório informar email ou telefone para confirmação de cobrança');
+      }
+    }
+
     const plainPassword = dto.password && dto.password.length >= 6
       ? dto.password
       : this.generateRandomPassword();
@@ -566,13 +580,40 @@ export class UsersService {
     };
   }
 
-  async updateStatus(id: string, status: string) {
+  async updateStatus(id: string, status: string, updaterId?: string, updaterRole?: UserRole, updaterAgencyId?: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: BigInt(id) },
+      select: {
+        id: true,
+        role: true,
+        agencyId: true,
+        createdBy: true,
+      },
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+
+    // Permission checks for AGENCY_ADMIN
+    if (updaterRole === UserRole.AGENCY_ADMIN && updaterId && updaterAgencyId) {
+      const userRole = user.role as string;
+      const allowedRoles = ['AGENCY_MANAGER', 'BROKER', 'PROPRIETARIO', 'INQUILINO'];
+      if (!allowedRoles.includes(userRole)) {
+        throw new ForbiddenException('Você não tem permissão para suspender este usuário.');
+      }
+      
+      const updater = await this.prisma.user.findUnique({
+        where: { id: BigInt(updaterId) },
+        select: { agencyId: true },
+      });
+      
+      const createdByUpdater = user.createdBy?.toString() === updaterId;
+      const sameAgency = updater?.agencyId && user.agencyId && updater.agencyId === user.agencyId;
+
+      if (!createdByUpdater && !sameAgency) {
+        throw new ForbiddenException('Você só pode suspender usuários da sua própria agência ou que você criou.');
+      }
     }
 
     const updated = await this.prisma.user.update({
@@ -626,6 +667,17 @@ export class UsersService {
 
         if (!createdByDeleter && !sameAgency) {
           throw new ForbiddenException('Você só pode excluir usuários da sua própria agência ou que você criou.');
+        }
+      }
+      else if (deleterRole === UserRole.INDEPENDENT_OWNER) {
+        // Independent owners can only delete users they created (tenants, building managers)
+        const allowedRoles = ['INQUILINO', 'BUILDING_MANAGER'];
+        if (!allowedRoles.includes(userRole)) {
+          throw new ForbiddenException('Você não tem permissão para excluir este usuário.');
+        }
+        const createdByDeleter = user.createdBy?.toString() === deleterId;
+        if (!createdByDeleter) {
+          throw new ForbiddenException('Você só pode excluir usuários que você criou.');
         }
       }
       else if (deleterRole === UserRole.AGENCY_MANAGER) {
@@ -867,6 +919,44 @@ export class UsersService {
     return { message: 'User deleted successfully' };
   }
 
+  /**
+   * Validate password strength
+   * Requirements:
+   * - Minimum 8 characters
+   * - At least one uppercase letter
+   * - At least one lowercase letter
+   * - At least one number
+   * - At least one special character (symbol)
+   */
+  private validatePasswordStrength(password: string): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    if (password.length < 8) {
+      errors.push('A senha deve ter no mínimo 8 caracteres');
+    }
+
+    if (!/[A-Z]/.test(password)) {
+      errors.push('A senha deve conter pelo menos uma letra maiúscula');
+    }
+
+    if (!/[a-z]/.test(password)) {
+      errors.push('A senha deve conter pelo menos uma letra minúscula');
+    }
+
+    if (!/[0-9]/.test(password)) {
+      errors.push('A senha deve conter pelo menos um número');
+    }
+
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+      errors.push('A senha deve conter pelo menos um caractere especial (!@#$%^&*()_+-=[]{}|;:,.<>?)');
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+    };
+  }
+
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: BigInt(userId) },
@@ -880,6 +970,12 @@ export class UsersService {
 
     if (!isPasswordValid) {
       throw new BadRequestException('Current password is incorrect');
+    }
+
+    // Validate password strength
+    const passwordValidation = this.validatePasswordStrength(newPassword);
+    if (!passwordValidation.valid) {
+      throw new BadRequestException(passwordValidation.errors.join('; '));
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -1085,13 +1181,27 @@ export class UsersService {
   }
 
   async validateDocument(document: string) {
+    // First validate document format (CPF/CNPJ)
+    const validation = this.documentValidation.validateDocument(document);
+    if (!validation.valid) {
+      return {
+        isAvailable: false,
+        message: validation.message || 'Documento inválido',
+        type: validation.type,
+        isAlphanumeric: validation.isAlphanumeric,
+      };
+    }
+
+    // Check if document is already registered
     const existingUser = await this.prisma.user.findFirst({
       where: { document },
     });
 
     return {
       isAvailable: !existingUser,
-      message: existingUser ? 'Document already registered' : 'Document is available',
+      message: existingUser ? 'Documento já cadastrado' : 'Documento disponível',
+      type: validation.type,
+      isAlphanumeric: validation.isAlphanumeric,
     };
   }
 
@@ -1303,6 +1413,23 @@ export class UsersService {
 
     if (existingUser) {
       throw new ConflictException('Este email já está sendo usado por outro usuário');
+    }
+
+    // Validate document (CPF or CNPJ) - supports alphanumeric CNPJ from Jan 2026
+    if (dto.document) {
+      const validation = this.documentValidation.validateDocument(dto.document);
+      if (!validation.valid) {
+        throw new BadRequestException(validation.message || 'Documento inválido');
+      }
+      // For CNPJ (especially alphanumeric), require email or SMS confirmation for billing
+      if (validation.type === 'CNPJ' && (!dto.email && !dto.phone)) {
+        throw new BadRequestException('Para CNPJ, é obrigatório informar email ou telefone para confirmação de cobrança');
+      }
+    }
+
+    // Require email or SMS for billing purposes
+    if (!dto.email && !dto.phone) {
+      throw new BadRequestException('É obrigatório informar email ou telefone para confirmação de cobrança');
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);

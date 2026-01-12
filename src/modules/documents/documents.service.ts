@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import * as PDFDocument from 'pdfkit';
+import * as crypto from 'crypto';
+import { PrismaService } from '../../config/prisma.service';
+import { TokenGeneratorService, TokenEntityType } from '../common/services/token-generator.service';
 
 interface ReceiptData {
   receiptNumber: string;
@@ -13,6 +16,9 @@ interface ReceiptData {
   description: string;
   paymentMethod: string;
   referenceMonth: string;
+  hash?: string;
+  ip?: string;
+  generatedAt?: string;
 }
 
 interface InvoiceData {
@@ -40,6 +46,11 @@ interface InvoiceData {
 
 @Injectable()
 export class DocumentsService {
+  constructor(
+    private prisma: PrismaService,
+    private tokenGenerator: TokenGeneratorService,
+  ) {}
+
   private formatCurrency(value: number): string {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -54,8 +65,11 @@ export class DocumentsService {
   }
 
   async generateReceipt(data: ReceiptData): Promise<Buffer> {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       try {
+        // Generate fiscal token for receipt (MR3X-REC-2025-XXXX-XXXX)
+        const receiptToken = await this.tokenGenerator.generateToken(TokenEntityType.RECEIPT);
+
         const doc = new PDFDocument({ margin: 50 });
         const chunks: Buffer[] = [];
 
@@ -65,7 +79,8 @@ export class DocumentsService {
 
         doc.fontSize(20).font('Helvetica-Bold').text('RECIBO DE PAGAMENTO', { align: 'center' });
         doc.moveDown();
-        doc.fontSize(12).font('Helvetica').text(`Nº ${data.receiptNumber}`, { align: 'center' });
+        doc.fontSize(12).font('Helvetica').text(`Nº ${data.receiptNumber || receiptToken}`, { align: 'center' });
+        doc.fontSize(10).font('Helvetica').text(`Token Fiscal: ${receiptToken}`, { align: 'center' });
         doc.moveDown(2);
 
         doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
@@ -124,8 +139,41 @@ export class DocumentsService {
         doc.text('Proprietário', { align: 'center' });
         doc.moveDown(2);
 
+        // Generate hash if not provided
+        const generatedAt = data.generatedAt || new Date().toISOString();
+        const receiptContent = JSON.stringify({
+          receiptNumber: data.receiptNumber || receiptToken,
+          paymentDate: data.paymentDate,
+          ownerName: data.ownerName,
+          ownerDocument: data.ownerDocument,
+          tenantName: data.tenantName,
+          tenantDocument: data.tenantDocument,
+          propertyAddress: data.propertyAddress,
+          amount: data.amount,
+          description: data.description,
+          paymentMethod: data.paymentMethod,
+          referenceMonth: data.referenceMonth,
+          generatedAt,
+          ip: data.ip || 'N/A',
+        });
+        const receiptHash = data.hash || crypto.createHash('sha256').update(receiptContent).digest('hex');
+
+        // Add integrity information
+        doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+        doc.moveDown();
+        doc.fontSize(9).font('Helvetica-Bold').text('INFORMAÇÕES DE INTEGRIDADE', { align: 'center' });
+        doc.moveDown(0.5);
+        doc.fontSize(8).font('Helvetica');
+        doc.text(`Gerado em: ${new Date(generatedAt).toLocaleString('pt-BR')}`, { align: 'center' });
+        if (data.ip) {
+          doc.text(`IP: ${data.ip}`, { align: 'center' });
+        }
+        doc.moveDown(0.5);
+        doc.fontSize(7).font('Helvetica').text(`Hash SHA-256: ${receiptHash.substring(0, 32)}...`, { align: 'center' });
+        doc.moveDown();
+
         doc.fontSize(8).text(
-          `Documento gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`,
+          `Documento gerado em ${new Date(generatedAt).toLocaleDateString('pt-BR')} às ${new Date(generatedAt).toLocaleTimeString('pt-BR')}`,
           { align: 'center' }
         );
 

@@ -15,6 +15,12 @@ export interface CreateInvoicePaymentDto {
   billingType?: 'BOLETO' | 'PIX' | 'CREDIT_CARD' | 'UNDEFINED';
 }
 
+export interface CreateNotificationPaymentDto {
+  notificationId: string;
+  userId: string;
+  billingType?: 'BOLETO' | 'PIX' | 'CREDIT_CARD' | 'UNDEFINED';
+}
+
 export interface PaymentLinkResult {
   success: boolean;
   paymentId?: string;

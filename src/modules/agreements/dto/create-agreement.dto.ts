@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNumber, IsOptional, IsDateString, IsEnum, IsArray } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsDateString, IsEnum, IsArray, Min, Max } from 'class-validator';
 
 export enum AgreementType {
   PAYMENT_SETTLEMENT = 'PAYMENT_SETTLEMENT',
@@ -81,6 +81,18 @@ export class CreateAgreementDto {
   @IsOptional()
   @IsNumber()
   fineAmount?: number;
+
+  @ApiPropertyOptional({ description: 'Interest percent (monthly percentage, e.g., 1 for 1% per month)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  interestPercent?: number;
+
+  @ApiPropertyOptional({ description: 'Interest amount (calculated automatically if interestPercent is provided)' })
+  @IsOptional()
+  @IsNumber()
+  interestAmount?: number;
 
   @ApiPropertyOptional({ description: 'Discount amount' })
   @IsOptional()

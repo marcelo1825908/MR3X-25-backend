@@ -10,6 +10,8 @@ export enum TokenEntityType {
   MANAGER = 'GER',
   DOCUMENT = 'DOC',
   INVOICE = 'INV',
+  INVOICE_FAT = 'FAT', // Fiscal invoice token (MR3X-FAT-2026-XXXX-XXXX)
+  RECEIPT = 'REC', // Receipt token (MR3X-REC-2026-XXXX-XXXX)
   AGENCY = 'AGE',
   ADMIN = 'ADM',
   AGENCY_ADMIN = 'AGA',
@@ -19,6 +21,7 @@ export enum TokenEntityType {
   LEGAL_AUDITOR = 'AUD',
   REPRESENTATIVE = 'REP',
   API_CLIENT = 'API',
+  SALES_LEAD = 'LEA', // Sales Lead token (MR3X-LEA-2026-XXXX-XXXX)
 }
 
 @Injectable()
@@ -107,16 +110,29 @@ export class TokenGeneratorService {
           return !!document;
 
         case TokenEntityType.INVOICE:
+        case TokenEntityType.INVOICE_FAT:
           const invoice = await this.prisma.invoice.findFirst({
             where: { token },
           });
           return !!invoice;
+        
+        case TokenEntityType.RECEIPT:
+          // Receipts might be stored in Payment model or separate Receipt model
+          // For now, check in Payment model if it has a receiptToken field
+          // This will be implemented when receipt model is added
+          return false;
 
         case TokenEntityType.AGENCY:
           const agency = await this.prisma.agency.findFirst({
             where: { token },
           });
           return !!agency;
+
+        case TokenEntityType.SALES_LEAD:
+          const salesLead = await this.prisma.salesLead.findFirst({
+            where: { token },
+          });
+          return !!salesLead;
 
         default:
           return false;
@@ -169,6 +185,8 @@ export class TokenGeneratorService {
       GER: TokenEntityType.MANAGER,
       DOC: TokenEntityType.DOCUMENT,
       INV: TokenEntityType.INVOICE,
+      FAT: TokenEntityType.INVOICE_FAT,
+      REC: TokenEntityType.RECEIPT,
       AGE: TokenEntityType.AGENCY,
       ADM: TokenEntityType.ADMIN,
       AGA: TokenEntityType.AGENCY_ADMIN,
@@ -178,6 +196,7 @@ export class TokenGeneratorService {
       AUD: TokenEntityType.LEGAL_AUDITOR,
       REP: TokenEntityType.REPRESENTATIVE,
       API: TokenEntityType.API_CLIENT,
+      LEA: TokenEntityType.SALES_LEAD,
     };
 
     return typeMap[parsed.entityType] || null;

@@ -428,19 +428,28 @@ export class ContractValidationService {
       }
     }
 
+    // CRECI is required only for brokers, not for independent owners
+    // Check if the contract creator is a broker or if there's an agency involved
+    const isBrokerContract = contract.agencyId !== null && contract.agencyId !== undefined;
+    const isIndependentOwner = contract.ownerUser?.role === 'INDEPENDENT_OWNER';
+    
     if (!contract.creci) {
-      if (contract.agency && contract.agency.creci) {
+      if (isIndependentOwner && !isBrokerContract) {
+        // Independent owners don't need CRECI - they have direct contract with MR3X (CEO)
+        // No error or warning needed
+      } else if (contract.agency && contract.agency.creci) {
         warnings.push({
           field: 'creci',
           label: 'CRECI do Corretor',
           message: 'Usando CRECI da imobiliária',
           recommendation: 'Recomenda-se informar o CRECI do corretor responsável pelo contrato',
         });
-      } else {
+      } else if (isBrokerContract) {
+        // CRECI is required for broker contracts
         errors.push({
           field: 'creci',
           label: 'CRECI do Corretor',
-          message: 'O CRECI do corretor é obrigatório para validade do contrato',
+          message: 'O CRECI do corretor é obrigatório para validade do contrato quando há intermediação imobiliária',
           category: 'legal',
         });
       }

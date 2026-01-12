@@ -5,8 +5,12 @@ import { ExtrajudicialNotificationVerificationController } from './extrajudicial
 import { ExtrajudicialNotificationHashService } from './services/extrajudicial-notification-hash.service';
 import { ExtrajudicialNotificationPdfService } from './services/extrajudicial-notification-pdf.service';
 import { ExtrajudicialSchedulerService } from './services/extrajudicial-scheduler.service';
+import { LegalValidationService } from './services/legal-validation.service';
+import { AsaasModule } from '../asaas/asaas.module';
+import { AsaasPaymentService } from '../asaas/asaas-payment.service';
 
 @Module({
+  imports: [AsaasModule],
   controllers: [
     ExtrajudicialNotificationsController,
     ExtrajudicialNotificationVerificationController,
@@ -16,12 +20,14 @@ import { ExtrajudicialSchedulerService } from './services/extrajudicial-schedule
     ExtrajudicialNotificationHashService,
     ExtrajudicialNotificationPdfService,
     ExtrajudicialSchedulerService,
+    LegalValidationService,
   ],
   exports: [
     ExtrajudicialNotificationsService,
     ExtrajudicialNotificationHashService,
     ExtrajudicialNotificationPdfService,
     ExtrajudicialSchedulerService,
+    LegalValidationService,
   ],
 })
 export class ExtrajudicialNotificationsModule {}

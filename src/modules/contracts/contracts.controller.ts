@@ -22,6 +22,10 @@ import { OwnerPermission } from '../../common/decorators/owner-permission.decora
 import { OwnerAction } from '../../common/constants/owner-permissions.constants';
 import { Request, Response } from 'express';
 import { SignatureLinkService } from './services/signature-link.service';
+import { ContractRulesEngineService } from './services/contract-rules-engine.service';
+import { ContractLifecycleService } from './services/contract-lifecycle.service';
+import { ContractLegalIntegrationService } from './services/contract-legal-integration.service';
+import { ContractLegalFlowService } from './services/contract-legal-flow.service';
 
 interface SignContractDto {
   signature: string;
@@ -60,6 +64,10 @@ export class ContractsController {
   constructor(
     private readonly contractsService: ContractsService,
     private readonly signatureLinkService: SignatureLinkService,
+    private readonly rulesEngine: ContractRulesEngineService,
+    private readonly lifecycle: ContractLifecycleService,
+    private readonly legalIntegration: ContractLegalIntegrationService,
+    private readonly legalFlow: ContractLegalFlowService,
   ) {}
 
   @Get()
@@ -164,6 +172,7 @@ export class ContractsController {
     @Param('id') id: string,
     @Body() body: SignContractDto,
     @CurrentUser('sub') userId: string,
+    @CurrentUser('role') userRole: string,
     @Req() req: Request,
   ) {
     const clientIP = req.ip || req.connection?.remoteAddress;
@@ -180,6 +189,7 @@ export class ContractsController {
         witnessDocument: body.witnessDocument,
       },
       userId,
+      userRole,
     );
   }
 
@@ -451,6 +461,216 @@ export class ContractsController {
     return {
       success: true,
       data: contract,
+    };
+  }
+
+  // ========== CONTRACT RULES ENGINE ENDPOINTS ==========
+
+  @Get(':id/rules/apply')
+  @ApiOperation({ summary: 'Apply contract rules engine to contract' })
+  @ApiParam({ name: 'id', description: 'Contract ID' })
+  async applyRules(@Param('id') id: string) {
+    const result = await this.rulesEngine.applyRules(id);
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  @Get(':id/rules/judicial-readiness')
+  @ApiOperation({ summary: 'Check judicial readiness checklist' })
+  @ApiParam({ name: 'id', description: 'Contract ID' })
+  async checkJudicialReadiness(@Param('id') id: string) {
+    const checklist = await this.rulesEngine.checkJudicialReadiness(id);
+    return {
+      success: true,
+      data: checklist,
+    };
+  }
+
+  @Get(':id/rules/automatic-clauses')
+  @ApiOperation({ summary: 'Generate automatic clauses based on contract conditions' })
+  @ApiParam({ name: 'id', description: 'Contract ID' })
+  async generateAutomaticClauses(@Param('id') id: string) {
+    const contract = await this.contractsService.findOne(id);
+    const clauses = this.rulesEngine.generateAutomaticClauses(contract);
+    return {
+      success: true,
+      data: { clauses },
+    };
+  }
+
+  // ========== CONTRACT LIFECYCLE ENDPOINTS ==========
+
+  @Get(':id/lifecycle/timeline')
+  @ApiOperation({ summary: 'Get contract lifecycle timeline' })
+  @ApiParam({ name: 'id', description: 'Contract ID' })
+  async getContractTimeline(@Param('id') id: string) {
+    const timeline = await this.lifecycle.getContractTimeline(id);
+    return {
+      success: true,
+      data: timeline,
+    };
+  }
+
+  @Post(':id/lifecycle/check-adjustment')
+  @ApiOperation({ summary: 'Check if rent adjustment is needed' })
+  @ApiParam({ name: 'id', description: 'Contract ID' })
+  async checkRentAdjustment(@Param('id') id: string) {
+    const needsAdjustment = await this.lifecycle.checkRentAdjustment(id);
+    return {
+      success: true,
+      data: { needsAdjustment },
+    };
+  }
+
+  @Post(':id/lifecycle/check-tacit-renewal')
+  @ApiOperation({ summary: 'Check if tacit renewal will occur' })
+  @ApiParam({ name: 'id', description: 'Contract ID' })
+  async checkTacitRenewal(@Param('id') id: string) {
+    const willRenew = await this.lifecycle.checkTacitRenewal(id);
+    return {
+      success: true,
+      data: { willRenew },
+    };
+  }
+
+  @Post(':id/lifecycle/termination-penalty')
+  @ApiOperation({ summary: 'Calculate proportional termination penalty' })
+  @ApiParam({ name: 'id', description: 'Contract ID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['terminationDate'],
+      properties: {
+        terminationDate: { type: 'string', format: 'date' },
+      },
+    },
+  })
+  async calculateTerminationPenalty(
+    @Param('id') id: string,
+    @Body('terminationDate') terminationDate: string,
+  ) {
+    const penalty = await this.lifecycle.calculateProportionalPenalty(id, new Date(terminationDate));
+    return {
+      success: true,
+      data: penalty,
+    };
+  }
+
+  // ========== LEGAL INTEGRATION ENDPOINTS ==========
+
+  @Get(':id/legal/notification-basis')
+  @ApiOperation({ summary: 'Get legal basis for extrajudicial notification' })
+  @ApiParam({ name: 'id', description: 'Contract ID' })
+  async getNotificationLegalBasis(@Param('id') id: string) {
+    const basis = await this.legalIntegration.getNotificationLegalBasis(id);
+    return {
+      success: true,
+      data: basis,
+    };
+  }
+
+  @Get(':id/legal/agreement-data')
+  @ApiOperation({ summary: 'Get contract data for agreement creation' })
+  @ApiParam({ name: 'id', description: 'Contract ID' })
+  async getAgreementContractData(@Param('id') id: string) {
+    const data = await this.legalIntegration.getAgreementContractData(id);
+    return {
+      success: true,
+      data,
+    };
+  }
+
+  @Get(':id/legal/default-status')
+  @ApiOperation({ summary: 'Get formal default status' })
+  @ApiParam({ name: 'id', description: 'Contract ID' })
+  async getFormalDefaultStatus(@Param('id') id: string) {
+    const status = await this.legalIntegration.getFormalDefaultStatus(id);
+    return {
+      success: true,
+      data: status,
+    };
+  }
+
+  @Get(':id/legal/judicial-dossier')
+  @ApiOperation({ summary: 'Prepare judicial dossier for contract' })
+  @ApiParam({ name: 'id', description: 'Contract ID' })
+  async prepareJudicialDossier(@Param('id') id: string) {
+    const dossier = await this.legalIntegration.prepareJudicialDossier(id);
+    return {
+      success: true,
+      data: dossier,
+    };
+  }
+
+  // ========== COMPLETE LEGAL FLOW ENDPOINTS ==========
+
+  @Post(':id/legal-flow/detect-default')
+  @ApiOperation({ summary: 'Step 1: Detect and register default' })
+  @ApiParam({ name: 'id', description: 'Contract ID' })
+  async detectDefault(@Param('id') id: string) {
+    const result = await this.legalFlow.detectDefault(id);
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  @Post(':id/legal-flow/generate-notice')
+  @ApiOperation({ summary: 'Step 2: Generate extrajudicial notice' })
+  @ApiParam({ name: 'id', description: 'Contract ID' })
+  async generateNotice(@Param('id') id: string, @CurrentUser('sub') userId: string) {
+    const result = await this.legalFlow.generateNotice(id, userId);
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  @Post(':id/legal-flow/create-agreement')
+  @ApiOperation({ summary: 'Step 3: Create agreement proposal' })
+  @ApiParam({ name: 'id', description: 'Contract ID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        installments: { type: 'number' },
+        discountPercent: { type: 'number' },
+      },
+    },
+  })
+  async createAgreementProposal(
+    @Param('id') id: string,
+    @CurrentUser('sub') userId: string,
+    @Body() options?: { installments?: number; discountPercent?: number },
+  ) {
+    const result = await this.legalFlow.createAgreementProposal(id, userId, options);
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  @Post(':id/legal-flow/prepare-judicial')
+  @ApiOperation({ summary: 'Step 4: Prepare for judicial action' })
+  @ApiParam({ name: 'id', description: 'Contract ID' })
+  async prepareJudicial(@Param('id') id: string) {
+    const result = await this.legalFlow.prepareJudicial(id);
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  @Post(':id/legal-flow/execute')
+  @ApiOperation({ summary: 'Execute complete legal flow (all steps)' })
+  @ApiParam({ name: 'id', description: 'Contract ID' })
+  async executeCompleteFlow(@Param('id') id: string, @CurrentUser('sub') userId: string) {
+    const result = await this.legalFlow.executeCompleteFlow(id, userId);
+    return {
+      success: true,
+      data: result,
     };
   }
 }

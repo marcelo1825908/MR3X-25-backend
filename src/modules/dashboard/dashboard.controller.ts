@@ -2,13 +2,17 @@ import { Controller, Get, Post, Param, Body, UseGuards, Req } from '@nestjs/comm
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { DashboardService } from './dashboard.service';
+import { ApiConsumptionService } from './api-consumption.service';
 
 @ApiTags('Dashboard')
 @Controller('dashboard')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class DashboardController {
-  constructor(private readonly dashboardService: DashboardService) {}
+  constructor(
+    private readonly dashboardService: DashboardService,
+    private readonly apiConsumptionService: ApiConsumptionService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Get dashboard data based on user role' })
@@ -109,5 +113,53 @@ export class DashboardController {
   ) {
     const userId = req.user.sub;
     return this.dashboardService.acknowledgeExtrajudicial(userId, notificationId, data);
+  }
+
+  @Get('api-consumption')
+  @ApiOperation({ summary: 'Get API consumption data (Cellere and Infosimples)' })
+  async getApiConsumption(@Req() req: any) {
+    const role = req.user.role;
+    
+    // Only CEO and ADMIN can view API consumption
+    if (role !== 'CEO' && role !== 'ADMIN') {
+      return { error: 'Acesso negado. Apenas CEO e ADMIN podem visualizar o consumo de APIs.' };
+    }
+
+    return this.apiConsumptionService.getConsumptionData();
+  }
+
+  @Post('api-consumption/refresh')
+  @ApiOperation({ summary: 'Manually refresh API consumption data' })
+  async refreshApiConsumption(@Req() req: any) {
+    const role = req.user.role;
+    
+    // Only CEO and ADMIN can refresh API consumption
+    if (role !== 'CEO' && role !== 'ADMIN') {
+      return { error: 'Acesso negado. Apenas CEO e ADMIN podem atualizar o consumo de APIs.' };
+    }
+
+    return this.apiConsumptionService.refreshData();
+  }
+
+  @Post('tenant-banner/acknowledge')
+  @ApiOperation({ summary: 'Record tenant acknowledgment of mandatory banner (legal requirement)' })
+  async acknowledgeBanner(
+    @Body() data: {
+      type: 'UPCOMING_DUE' | 'OVERDUE' | 'EXTRAJUDICIAL' | 'AGREEMENT';
+      itemId?: string;
+      ipAddress: string;
+      userAgent: string;
+    },
+    @Req() req: any,
+  ) {
+    const userId = req.user.sub;
+    const role = req.user.role;
+
+    // Only tenants can acknowledge banner
+    if (role !== 'INQUILINO') {
+      return { error: 'Acesso negado. Apenas inquilinos podem reconhecer o banner.' };
+    }
+
+    return this.dashboardService.acknowledgeBanner(userId, data);
   }
 }

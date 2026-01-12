@@ -35,6 +35,7 @@ async function main() {
 
   await prisma.inspectionMedia.deleteMany();
   await prisma.inspectionSignatureLink.deleteMany();
+  await prisma.inspectionAudit.deleteMany();
   await prisma.inspectionItem.deleteMany();
   await prisma.inspection.deleteMany();
   await prisma.inspectionTemplate.deleteMany();

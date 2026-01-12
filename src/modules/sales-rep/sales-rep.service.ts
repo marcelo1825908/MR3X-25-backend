@@ -1,9 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../config/prisma.service';
+import { TokenGeneratorService, TokenEntityType } from '../common/services/token-generator.service';
+import { CommissionService } from './commission.service';
 
 @Injectable()
 export class SalesRepService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private tokenGeneratorService: TokenGeneratorService,
+    private commissionService: CommissionService,
+  ) {}
 
   async getStats(salesRepId: bigint) {
     const currentDate = new Date();
@@ -14,6 +20,13 @@ export class SalesRepService {
     const prospects = await this.prisma.salesProspect.findMany({
       where: { salesRepId },
     });
+
+    // Calculate lead metrics
+    const totalLeads = prospects.length;
+    const leadsCaptured = prospects.filter(p => p.source && p.source !== 'manual').length;
+    const newLeads = prospects.filter(p => p.status === 'new' || p.status === 'contacted').length;
+    const contactedLeads = prospects.filter(p => p.status === 'contacted').length;
+    const convertedLeads = prospects.filter(p => p.status === 'closed_won').length;
 
     const leadsInProgress = prospects.filter(p =>
       !['closed_won', 'closed_lost'].includes(p.status)
@@ -76,26 +89,128 @@ export class SalesRepService {
 
     const topProspects = await this.getTopProspects(salesRepId);
 
+    // Get important alerts
+    const alerts = await this.getAlerts(salesRepId);
+
     return {
+      // Leads metrics
+      totalLeads,
+      leadsCaptured,
+      newLeads,
+      contactedLeads,
+      convertedLeads,
+      // Prospects metrics
       leadsInProgress,
       conversions,
       monthlyTarget,
       monthlyAchieved,
       totalProspects,
+      // Proposals metrics
       proposalsSent,
       proposalsAccepted,
       proposalsPending,
       proposalsRejected,
+      // Revenue metrics
       expectedRevenue,
       commissionEarned,
       commissionPending,
       avgTicket,
       conversionRate: Number(conversionRate),
+      // Charts and lists
       weeklyPerformance,
       pipelineData,
       recentLeads,
       topProspects,
+      // Alerts
+      alerts,
     };
+  }
+
+  /**
+   * Get important alerts for the representative
+   */
+  private async getAlerts(salesRepId: bigint) {
+    const alerts: Array<{
+      type: string;
+      title: string;
+      message: string;
+      priority: 'low' | 'normal' | 'high' | 'urgent';
+      actionUrl?: string;
+    }> = [];
+
+    // Check for approved proposals
+    const approvedProposals = await this.prisma.salesProposal.findMany({
+      where: {
+        salesRepId,
+        status: 'accepted',
+        createdAt: {
+          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
+        },
+      },
+      include: {
+        prospect: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (approvedProposals.length > 0) {
+      alerts.push({
+        type: 'proposal_approved',
+        title: 'Proposta Aprovada',
+        message: `${approvedProposals.length} proposta(s) aprovada(s) recentemente`,
+        priority: 'high',
+        actionUrl: '/dashboard/sales-proposals',
+      });
+    }
+
+    // Check for released commissions
+    const paidCommissions = await this.prisma.salesCommission.findMany({
+      where: {
+        salesRepId,
+        status: 'paid',
+        paidAt: {
+          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
+        },
+      },
+    });
+
+    if (paidCommissions.length > 0) {
+      const totalPaid = paidCommissions.reduce((sum, c) => sum + Number(c.commissionValue), 0);
+      alerts.push({
+        type: 'commission_released',
+        title: 'Comissão Liberada',
+        message: `R$ ${totalPaid.toFixed(2)} em comissões pagas recentemente`,
+        priority: 'high',
+        actionUrl: '/dashboard/sales-commissions',
+      });
+    }
+
+    // Check for pending issues (proposals expiring soon)
+    const expiringProposals = await this.prisma.salesProposal.findMany({
+      where: {
+        salesRepId,
+        status: { in: ['sent', 'viewed'] },
+        validUntil: {
+          lte: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // Expiring in 3 days
+          gte: new Date(),
+        },
+      },
+    });
+
+    if (expiringProposals.length > 0) {
+      alerts.push({
+        type: 'proposal_expiring',
+        title: 'Propostas Expirando',
+        message: `${expiringProposals.length} proposta(s) expirando em breve`,
+        priority: 'normal',
+        actionUrl: '/dashboard/sales-proposals',
+      });
+    }
+
+    return alerts;
   }
 
   private async getWeeklyPerformance(salesRepId: bigint) {
@@ -198,6 +313,271 @@ export class SalesRepService {
       probability: p.probability || 20,
     }));
   }
+
+  // ==================== LEAD MANAGEMENT METHODS ====================
+
+  async getLeads(salesRepId: bigint, filters?: { status?: string; source?: string; search?: string }) {
+    const where: any = { salesRepId };
+
+    if (filters?.status) {
+      where.status = filters.status;
+    }
+
+    if (filters?.source) {
+      where.source = filters.source;
+    }
+
+    if (filters?.search) {
+      where.OR = [
+        { contactName: { contains: filters.search, mode: 'insensitive' } },
+        { contactEmail: { contains: filters.search, mode: 'insensitive' } },
+        { companyName: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const leads = await this.prisma.salesLead.findMany({
+      where,
+      include: {
+        activities: {
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return leads.map(lead => ({
+      id: lead.id.toString(),
+      token: lead.token,
+      companyName: lead.companyName,
+      contactName: lead.contactName,
+      contactEmail: lead.contactEmail,
+      contactPhone: lead.contactPhone,
+      city: lead.city,
+      state: lead.state,
+      source: lead.source,
+      status: lead.status,
+      planInterest: lead.planInterest,
+      notes: lead.notes,
+      lastContactAt: lead.lastContactAt?.toISOString(),
+      convertedAt: lead.convertedAt?.toISOString(),
+      convertedToProspectId: lead.convertedToProspectId?.toString(),
+      convertedToAgencyId: lead.convertedToAgencyId?.toString(),
+      createdAt: lead.createdAt.toISOString(),
+      updatedAt: lead.updatedAt.toISOString(),
+      activities: lead.activities.map(activity => ({
+        id: activity.id.toString(),
+        type: activity.type,
+        title: activity.title,
+        description: activity.description,
+        createdAt: activity.createdAt.toISOString(),
+      })),
+    }));
+  }
+
+  async createLead(salesRepId: bigint, data: any) {
+    const token = await this.tokenGeneratorService.generateToken(TokenEntityType.SALES_LEAD);
+
+    const lead = await this.prisma.salesLead.create({
+      data: {
+        salesRepId,
+        token,
+        companyName: data.companyName,
+        contactName: data.contactName,
+        contactEmail: data.contactEmail,
+        contactPhone: data.contactPhone,
+        city: data.city,
+        state: data.state,
+        source: data.source || 'Manual',
+        planInterest: data.planInterest,
+        notes: data.notes,
+        status: 'new',
+      },
+    });
+
+    return {
+      id: lead.id.toString(),
+      token: lead.token,
+      companyName: lead.companyName,
+      contactName: lead.contactName,
+      contactEmail: lead.contactEmail,
+      contactPhone: lead.contactPhone,
+      city: lead.city,
+      state: lead.state,
+      source: lead.source,
+      status: lead.status,
+      planInterest: lead.planInterest,
+      notes: lead.notes,
+      createdAt: lead.createdAt.toISOString(),
+    };
+  }
+
+  async updateLead(id: string, salesRepId: bigint, data: any) {
+    // Verify ownership
+    const existingLead = await this.prisma.salesLead.findFirst({
+      where: { id: BigInt(id), salesRepId },
+    });
+
+    if (!existingLead) {
+      throw new NotFoundException('Lead not found or access denied');
+    }
+
+    const lead = await this.prisma.salesLead.update({
+      where: { id: BigInt(id) },
+      data: {
+        companyName: data.companyName,
+        contactName: data.contactName,
+        contactEmail: data.contactEmail,
+        contactPhone: data.contactPhone,
+        city: data.city,
+        state: data.state,
+        source: data.source,
+        status: data.status,
+        planInterest: data.planInterest,
+        notes: data.notes,
+        lastContactAt: data.lastContactAt ? new Date(data.lastContactAt) : undefined,
+      },
+    });
+
+    return {
+      id: lead.id.toString(),
+      token: lead.token,
+      companyName: lead.companyName,
+      contactName: lead.contactName,
+      contactEmail: lead.contactEmail,
+      contactPhone: lead.contactPhone,
+      city: lead.city,
+      state: lead.state,
+      source: lead.source,
+      status: lead.status,
+      planInterest: lead.planInterest,
+      notes: lead.notes,
+      lastContactAt: lead.lastContactAt?.toISOString(),
+      updatedAt: lead.updatedAt.toISOString(),
+    };
+  }
+
+  async deleteLead(id: string, salesRepId: bigint) {
+    // Verify ownership
+    const existingLead = await this.prisma.salesLead.findFirst({
+      where: { id: BigInt(id), salesRepId },
+    });
+
+    if (!existingLead) {
+      throw new NotFoundException('Lead not found or access denied');
+    }
+
+    await this.prisma.salesLead.delete({
+      where: { id: BigInt(id) },
+    });
+
+    return { success: true };
+  }
+
+  async addLeadActivity(id: string, salesRepId: bigint, data: { type: string; title: string; description?: string }) {
+    // Verify ownership
+    const existingLead = await this.prisma.salesLead.findFirst({
+      where: { id: BigInt(id), salesRepId },
+    });
+
+    if (!existingLead) {
+      throw new NotFoundException('Lead not found or access denied');
+    }
+
+    const activity = await this.prisma.salesLeadActivity.create({
+      data: {
+        leadId: BigInt(id),
+        type: data.type,
+        title: data.title,
+        description: data.description,
+        createdBy: salesRepId,
+      },
+    });
+
+    // Update last contact date if activity type is contact-related
+    if (['call', 'meeting', 'note'].includes(data.type)) {
+      await this.prisma.salesLead.update({
+        where: { id: BigInt(id) },
+        data: { lastContactAt: new Date() },
+      });
+    }
+
+    return {
+      id: activity.id.toString(),
+      type: activity.type,
+      title: activity.title,
+      description: activity.description,
+      createdAt: activity.createdAt.toISOString(),
+    };
+  }
+
+  async convertLeadToProspect(id: string, salesRepId: bigint, data: {
+    name: string;
+    type: 'agency' | 'independent_owner';
+    address?: string;
+    cep?: string;
+    cnpj?: string;
+    estimatedValue?: number;
+    probability?: number;
+  }) {
+    // Verify ownership
+    const existingLead = await this.prisma.salesLead.findFirst({
+      where: { id: BigInt(id), salesRepId },
+    });
+
+    if (!existingLead) {
+      throw new NotFoundException('Lead not found or access denied');
+    }
+
+    if (existingLead.convertedToProspectId) {
+      throw new BadRequestException('Lead already converted to prospect');
+    }
+
+    // Create prospect from lead
+    const prospect = await this.prisma.salesProspect.create({
+      data: {
+        salesRepId,
+        leadId: BigInt(id),
+        name: data.name,
+        type: data.type,
+        contactName: existingLead.contactName,
+        contactEmail: existingLead.contactEmail,
+        contactPhone: existingLead.contactPhone,
+        address: data.address,
+        cep: data.cep,
+        city: existingLead.city,
+        state: existingLead.state,
+        cnpj: data.cnpj,
+        status: 'prospecting',
+        stage: 'prospecting',
+        source: existingLead.source,
+        planInterest: existingLead.planInterest,
+        estimatedValue: data.estimatedValue,
+        probability: data.probability || 20,
+        notes: existingLead.notes,
+      },
+    });
+
+    // Update lead with conversion info
+    await this.prisma.salesLead.update({
+      where: { id: BigInt(id) },
+      data: {
+        status: 'converted',
+        convertedAt: new Date(),
+        convertedToProspectId: prospect.id,
+      },
+    });
+
+    return {
+      id: prospect.id.toString(),
+      name: prospect.name,
+      type: prospect.type,
+      leadId: id,
+      createdAt: prospect.createdAt.toISOString(),
+    };
+  }
+
+  // ==================== PROSPECT MANAGEMENT METHODS ====================
 
   async getProspects(salesRepId: bigint) {
     const prospects = await this.prisma.salesProspect.findMany({
@@ -405,6 +785,97 @@ export class SalesRepService {
       id,
       status: 'sent',
       sentAt: proposal.sentAt?.toISOString(),
+    };
+  }
+
+  /**
+   * Accept/Approve proposal - creates commission automatically
+   * This is called when a proposal is accepted (by prospect or manually)
+   */
+  async acceptProposal(id: string, data?: { agencyId?: string; agencyName?: string }) {
+    const proposal = await this.prisma.salesProposal.findUnique({
+      where: { id: BigInt(id) },
+      include: {
+        prospect: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            convertedToAgencyId: true,
+          },
+        },
+        salesRep: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+
+    if (!proposal) {
+      throw new NotFoundException('Proposal not found');
+    }
+
+    if (proposal.status === 'accepted') {
+      throw new BadRequestException('Proposal already accepted');
+    }
+
+    // Update proposal status
+    const updatedProposal = await this.prisma.salesProposal.update({
+      where: { id: BigInt(id) },
+      data: {
+        status: 'accepted',
+        respondedAt: new Date(),
+      },
+    });
+
+    // Update prospect status
+    await this.prisma.salesProspect.update({
+      where: { id: proposal.prospectId },
+      data: {
+        status: 'closed_won',
+        stage: 'closed_won',
+        convertedAt: new Date(),
+      },
+    });
+
+    // Get agency ID (from prospect conversion or provided data)
+    let agencyId: bigint | undefined;
+    let agencyName: string;
+
+    if (data?.agencyId) {
+      agencyId = BigInt(data.agencyId);
+      agencyName = data.agencyName || proposal.prospect.name;
+    } else if (proposal.prospect.convertedToAgencyId) {
+      agencyId = proposal.prospect.convertedToAgencyId;
+      const agency = await this.prisma.agency.findUnique({
+        where: { id: agencyId },
+        select: { name: true },
+      });
+      agencyName = agency?.name || proposal.prospect.name;
+    } else {
+      // If no agency yet, we'll create commission with prospect name
+      // Agency will be set when prospect is converted to agency
+      agencyName = proposal.prospect.name;
+    }
+
+    // Create commission (pending approval)
+    if (agencyId) {
+      await this.commissionService.createCommission(
+        proposal.salesRep.id,
+        proposal.id,
+        agencyId,
+        agencyName,
+        proposal.planType,
+        Number(proposal.finalValue),
+      );
+    }
+
+    return {
+      id,
+      status: 'accepted',
+      respondedAt: updatedProposal.respondedAt?.toISOString(),
+      commissionCreated: !!agencyId,
     };
   }
 
@@ -857,6 +1328,7 @@ export class SalesRepService {
   }
 
   async getAgenciesSummary() {
+    // Get agencies
     const agencies = await this.prisma.agency.findMany({
       select: {
         id: true,
@@ -878,7 +1350,32 @@ export class SalesRepService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return agencies.map(agency => ({
+    // Get independent property owners
+    const independentOwners = await this.prisma.user.findMany({
+      where: {
+        role: 'INDEPENDENT_OWNER',
+        status: 'ACTIVE',
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        city: true,
+        state: true,
+        status: true,
+        plan: true,
+        createdAt: true,
+        _count: {
+          select: {
+            ownedProperties: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const agencyList = agencies.map(agency => ({
       id: String(agency.id),
       name: agency.name,
       email: agency.email,
@@ -887,13 +1384,35 @@ export class SalesRepService {
       state: agency.state || '',
       status: agency.status,
       plan: agency.plan,
+      type: 'agency' as const,
       userCount: agency._count.users,
       propertyCount: agency._count.properties,
       createdAt: agency.createdAt.toISOString(),
     }));
+
+    const ownerList = independentOwners.map(owner => ({
+      id: String(owner.id),
+      name: owner.name || '',
+      email: owner.email,
+      phone: owner.phone || '',
+      city: owner.city || '',
+      state: owner.state || '',
+      status: owner.status,
+      plan: owner.plan,
+      type: 'independent_owner' as const,
+      userCount: 1, // Independent owner is a single user
+      propertyCount: owner._count?.ownedProperties || 0,
+      createdAt: owner.createdAt.toISOString(),
+    }));
+
+    // Combine and sort by creation date
+    return [...agencyList, ...ownerList].sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
   }
 
   async getAgenciesMetrics() {
+    // Get agencies
     const agencies = await this.prisma.agency.findMany({
       select: {
         id: true,
@@ -909,17 +1428,43 @@ export class SalesRepService {
       },
     });
 
+    // Get independent owners
+    const independentOwners = await this.prisma.user.findMany({
+      where: {
+        role: 'INDEPENDENT_OWNER',
+      },
+      select: {
+        id: true,
+        status: true,
+        plan: true,
+        createdAt: true,
+        _count: {
+          select: {
+            ownedProperties: true,
+          },
+        },
+      },
+    });
+
     const totalAgencies = agencies.length;
+    const totalIndependentOwners = independentOwners.length;
     const activeAgencies = agencies.filter(a => a.status === 'ACTIVE').length;
+    const activeIndependentOwners = independentOwners.filter(o => o.status === 'ACTIVE').length;
     const inactiveAgencies = agencies.filter(a => a.status === 'INACTIVE').length;
+    const inactiveIndependentOwners = independentOwners.filter(o => o.status === 'INACTIVE').length;
 
-    const planDistribution = agencies.reduce((acc, agency) => {
-      acc[agency.plan] = (acc[agency.plan] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    // Combine plan distribution
+    const planDistribution: Record<string, number> = {};
+    agencies.forEach(agency => {
+      planDistribution[agency.plan] = (planDistribution[agency.plan] || 0) + 1;
+    });
+    independentOwners.forEach(owner => {
+      planDistribution[owner.plan] = (planDistribution[owner.plan] || 0) + 1;
+    });
 
-    const totalUsers = agencies.reduce((sum, a) => sum + a._count.users, 0);
-    const totalProperties = agencies.reduce((sum, a) => sum + a._count.properties, 0);
+    const totalUsers = agencies.reduce((sum, a) => sum + a._count.users, 0) + totalIndependentOwners;
+    const totalProperties = agencies.reduce((sum, a) => sum + a._count.properties, 0) + 
+      independentOwners.reduce((sum, o) => sum + (o._count?.ownedProperties || 0), 0);
 
     const monthlySignups = agencies.reduce((acc, agency) => {
       const month = agency.createdAt.toISOString().slice(0, 7); // YYYY-MM

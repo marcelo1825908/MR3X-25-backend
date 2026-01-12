@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../config/prisma.service';
 import { CellereService } from './integrations/cellere.service';
@@ -6,6 +6,7 @@ import { InfoSimplesService } from './integrations/infosimples.service';
 import { AnalyzeTenantDto, AnalysisType, GetAnalysisHistoryDto } from './dto';
 import { TenantAnalysisStatus, RiskLevel, UserRole } from '@prisma/client';
 import { TenantVisibilityService } from './tenant-visibility.service';
+import { BillingCycleService } from '../billing-cycle/billing-cycle.service';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -18,6 +19,8 @@ export class TenantAnalysisService {
     private cellereService: CellereService,
     private infoSimplesService: InfoSimplesService,
     private configService: ConfigService,
+    @Inject(forwardRef(() => BillingCycleService))
+    private billingCycleService: BillingCycleService,
   ) {
     this.analysisValidityDays = this.configService.get<number>('TENANT_ANALYSIS_VALIDITY_DAYS', 30);
   }
@@ -174,6 +177,23 @@ export class TenantAnalysisService {
         },
       },
     });
+
+    // Track usage for billing (only when a new analysis is created, not for cached results)
+    if (agencyId) {
+      try {
+        await this.billingCycleService.trackUsage({
+          agencyId: agencyId.toString(),
+          feature: 'screenings',
+          quantity: 1,
+          referenceId: analysis.id.toString(),
+          referenceType: 'tenant_analysis',
+        });
+        this.logger.log(`Usage tracked for analysis ${analysis.id} - agency ${agencyId}`);
+      } catch (error) {
+        // Log error but don't fail the analysis if usage tracking fails
+        this.logger.error(`Failed to track usage for analysis ${analysis.id}: ${error.message}`);
+      }
+    }
 
     this.logger.log(`Analysis completed for ${this.maskDocument(document)} - Risk: ${riskLevel} (${riskScore})`);
     return this.formatAnalysisResponse(analysis);
@@ -589,29 +609,35 @@ export class TenantAnalysisService {
     let score = 1000;
 
     if (financial) {
+      // More aggressive credit score deduction
       if (financial.creditScore) {
-        score -= Math.max(0, (1000 - financial.creditScore) * 0.3);
+        score -= Math.max(0, (1000 - financial.creditScore) * 0.5); // Increased from 0.3 to 0.5
       }
+      // More aggressive debt deductions
       if (financial.totalDebts > 0) {
-        score -= Math.min(150, financial.totalDebts / 200);
+        score -= Math.min(200, financial.totalDebts / 100); // More aggressive: was /200, now /100
       }
       if (financial.activeDebts > 0) {
-        score -= Math.min(75, financial.activeDebts * 15);
+        score -= Math.min(150, financial.activeDebts * 25); // More aggressive: was *15, now *25
       }
       if (financial.hasNegativeRecords) {
-        score -= 50;
+        score -= 100; // Increased from 50 to 100
       }
       if (financial.paymentDelays > 0) {
-        score -= Math.min(100, financial.paymentDelays * 10);
+        score -= Math.min(150, financial.paymentDelays * 15); // More aggressive: was *10, now *15
+      }
+      // Additional deduction for average delay days
+      if (financial.averageDelayDays > 0) {
+        score -= Math.min(100, financial.averageDelayDays * 2);
       }
     }
 
     if (background) {
       if (background.hasCriminalRecords) {
         background.criminalRecords?.forEach((record: any) => {
-          if (record.severity === 'HIGH') score -= 250;
-          else if (record.severity === 'MEDIUM') score -= 150;
-          else score -= 75;
+          if (record.severity === 'HIGH') score -= 300; // Increased from 250
+          else if (record.severity === 'MEDIUM') score -= 200; // Increased from 150
+          else score -= 100; // Increased from 75
         });
       }
 
@@ -623,50 +649,56 @@ export class TenantAnalysisService {
           const processNumber = (record.processNumber || '').toLowerCase();
 
           if (this.isEvictionRelated(type)) {
-            judicialDeduction += 100;
+            judicialDeduction += 150; // Increased from 100
           }
           else if (this.isMinorJudicialRecord(type)) {
-            judicialDeduction += 5;
+            judicialDeduction += 10; // Increased from 5
           }
           else {
-            judicialDeduction += 20;
+            judicialDeduction += 35; // Increased from 20
           }
         });
 
-        score -= Math.min(200, judicialDeduction);
+        score -= Math.min(300, judicialDeduction); // Increased cap from 200 to 300
       }
 
       if (background.hasEvictions) {
-        score -= Math.min(300, background.evictionsCount * 150);
+        score -= Math.min(400, background.evictionsCount * 200); // More aggressive: was *150, now *200
       }
 
       if (background.hasProtests) {
-        score -= Math.min(100, (background.protestRecords?.length || 0) * 20);
-        score -= Math.min(100, (background.totalProtestValue || 0) / 500);
+        // More aggressive protest deductions
+        score -= Math.min(150, (background.protestRecords?.length || 0) * 30); // Increased from 20 to 30
+        score -= Math.min(150, (background.totalProtestValue || 0) / 300); // More aggressive: was /500, now /300
       }
     }
 
     if (documentValidation) {
       if (!documentValidation.documentValid) {
-        score -= 200;
+        score -= 300; // Increased from 200
       }
       if (!documentValidation.documentActive) {
-        score -= 100;
+        score -= 150; // Increased from 100
       }
       if (documentValidation.hasFraudAlerts) {
-        score -= 300;
+        score -= 400; // Increased from 300
+      }
+      if (!documentValidation.documentOwnerMatch) {
+        score -= 200; // New: penalize if document owner doesn't match
       }
     }
 
     score = Math.max(0, Math.min(1000, Math.round(score)));
 
+    // More strict thresholds to ensure score aligns with risk level
+    // A high score (750+) should only be LOW risk, not MEDIUM or HIGH
     let riskLevel: RiskLevel;
-    if (score >= 800) riskLevel = RiskLevel.LOW;
-    else if (score >= 600) riskLevel = RiskLevel.MEDIUM;
-    else if (score >= 400) riskLevel = RiskLevel.HIGH;
-    else riskLevel = RiskLevel.CRITICAL;
+    if (score >= 800) riskLevel = RiskLevel.LOW; // Strict: only very high scores are LOW risk
+    else if (score >= 600) riskLevel = RiskLevel.MEDIUM; // Medium scores are MEDIUM risk
+    else if (score >= 400) riskLevel = RiskLevel.HIGH; // Lower scores are HIGH risk
+    else riskLevel = RiskLevel.CRITICAL; // Very low scores are CRITICAL
 
-    this.logger.debug(`Risk calculation: score=${score}, level=${riskLevel}, judicial=${background?.judicialRecords?.length || 0} records`);
+    this.logger.debug(`Risk calculation: score=${score}, level=${riskLevel}, judicial=${background?.judicialRecords?.length || 0} records, protests=${background?.protestRecords?.length || 0}, debts=${financial?.totalDebts || 0}`);
 
     return { riskScore: score, riskLevel };
   }

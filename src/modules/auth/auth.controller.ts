@@ -39,8 +39,10 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'User login' })
-  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
-    const result = await this.authService.login(dto);
+  async login(@Body() dto: LoginDto, @Req() req: any, @Res({ passthrough: true }) res: Response) {
+    const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+    const result = await this.authService.login(dto, ip, userAgent);
 
     // Set HTTP-only cookies
     res.cookie('accessToken', result.accessToken, {
@@ -98,7 +100,9 @@ export class AuthController {
     res.clearCookie('accessToken', { path: '/' });
     res.clearCookie('refreshToken', { path: '/' });
 
-    return this.authService.logout(BigInt(req.user.sub));
+    const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+    return this.authService.logout(BigInt(req.user.sub), undefined, ip, userAgent);
   }
 
   @Post('logout-all')

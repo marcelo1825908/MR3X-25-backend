@@ -316,16 +316,51 @@ export class PaymentsService {
           },
         });
 
-        // Calculate status for INDEPENDENT_OWNER: if has both tenant and nextDueDate, change to DISPONIVEL
-        if (updatedProperty.owner?.role === 'INDEPENDENT_OWNER') {
-          const hasTenant = !!updatedProperty.tenantId;
-          const hasNextDue = !!updatedProperty.nextDueDate;
-          
-          if (hasTenant && hasNextDue && updatedProperty.status === 'INCOMPLETO') {
-            // If status is INCOMPLETO but now has both tenant and nextDueDate, change to DISPONIVEL
+        // Update property status based on tenant and contract status
+        // Property cannot be DISPONIVEL if tenant is linked and contract exists (even pending signatures)
+        // Note: We need to get the property with tenantId to check contracts
+        const propertyWithTenant = await this.prisma.property.findUnique({
+          where: { id: BigInt(data.propertyId) },
+          select: { tenantId: true },
+        });
+        
+        if (propertyWithTenant?.tenantId) {
+          // Import PropertiesService to use the helper method
+          // For now, we'll use the same logic inline to avoid circular dependency
+          const activeContract = await this.prisma.contract.findFirst({
+            where: {
+              propertyId: BigInt(data.propertyId),
+              tenantId: propertyWithTenant.tenantId,
+              deleted: false,
+              status: {
+                notIn: ['REVOGADO', 'ENCERRADO', 'TERMINATED', 'REVOKED'],
+              },
+            },
+            select: { status: true },
+            orderBy: { createdAt: 'desc' },
+          });
+
+          let correctStatus = 'DISPONIVEL';
+          if (activeContract) {
+            const contractStatus = (activeContract.status || '').toUpperCase();
+            if (contractStatus === 'ATIVO' || contractStatus === 'ACTIVE' || 
+                contractStatus === 'ASSINADO' || contractStatus === 'SIGNED') {
+              correctStatus = 'ALUGADO';
+            } else if (contractStatus === 'PENDENTE' || contractStatus === 'PENDING' ||
+                       contractStatus === 'AGUARDANDO_ASSINATURAS' || contractStatus === 'AGUARDANDO_ASSINATURA' ||
+                       contractStatus === 'AWAITING_SIGNATURE' || contractStatus === 'AWAITING_SIGNATURES') {
+              correctStatus = 'EM_NEGOCIACAO';
+            } else {
+              correctStatus = 'ALUGADO';
+            }
+          } else {
+            correctStatus = 'EM_NEGOCIACAO';
+          }
+
+          if (correctStatus !== updatedProperty.status && correctStatus !== 'DISPONIVEL') {
             await this.prisma.property.update({
               where: { id: BigInt(data.propertyId) },
-              data: { status: 'DISPONIVEL' },
+              data: { status: correctStatus },
             });
           }
         }
@@ -404,11 +439,15 @@ export class PaymentsService {
     };
   }
 
-  async remove(paymentId: string, userId: string, role: string) {
+  async remove(paymentId: string, userId: string, role: string, agencyId?: string) {
     const existing = await this.prisma.payment.findUnique({
       where: { id: BigInt(paymentId) },
       include: {
-        property: true,
+        property: {
+          include: {
+            agency: true,
+          },
+        },
       },
     });
 
@@ -416,15 +455,36 @@ export class PaymentsService {
       throw new NotFoundException('Payment not found');
     }
 
-    if (role !== 'ADMIN' && role !== 'CEO' && existing.property?.ownerId?.toString() !== userId) {
-      throw new ForbiddenException('Access denied');
+    // Platform admins can delete any payment
+    if (role === 'ADMIN' || role === 'CEO') {
+      await this.prisma.payment.delete({
+        where: { id: BigInt(paymentId) },
+      });
+      return { success: true };
     }
 
-    await this.prisma.payment.delete({
-      where: { id: BigInt(paymentId) },
-    });
+    // Property owner can delete payments for their properties
+    if (existing.property?.ownerId?.toString() === userId) {
+      await this.prisma.payment.delete({
+        where: { id: BigInt(paymentId) },
+      });
+      return { success: true };
+    }
 
-    return { success: true };
+    // Agency admins and managers can delete payments for properties in their agency
+    if (['AGENCY_ADMIN', 'AGENCY_MANAGER'].includes(role) && agencyId) {
+      const isSameAgency = existing.property?.agencyId && 
+        existing.property.agencyId.toString() === agencyId;
+      
+      if (isSameAgency) {
+        await this.prisma.payment.delete({
+          where: { id: BigInt(paymentId) },
+        });
+        return { success: true };
+      }
+    }
+
+    throw new ForbiddenException('Access denied');
   }
 
   async getAnnualReport(userId: string, role: string, year?: number, userAgencyId?: string) {

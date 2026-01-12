@@ -55,8 +55,8 @@ export const PROPRIETARIO_PERMISSIONS: Record<string, ModulePermission> = {
 
   contracts: {
     accessLevel: OwnerAccessLevel.VIEW_ONLY,
-    allowedActions: [OwnerAction.VIEW],
-    message: 'Contratos de aluguel são assinados pela imobiliária em nome do proprietário',
+    allowedActions: [OwnerAction.VIEW, OwnerAction.SIGN],
+    message: 'Proprietário pode visualizar e assinar contratos de aluguel onde é parte',
   },
 
   service_contracts: {

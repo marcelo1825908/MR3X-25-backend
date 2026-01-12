@@ -1,6 +1,6 @@
 import { Injectable, ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../config/prisma.service';
-import { PLANS_CONFIG, getPlanLimits, getPlanByName, EntityType, PlanLimits } from './plans.data';
+import { PLANS_CONFIG, getPlanLimits, getPlanByName, EntityType, PlanLimits, getFreeUsageLimits } from './plans.data';
 import { UserRole } from '@prisma/client';
 
 // Platform-level roles that are NEVER subject to plan limits
@@ -97,6 +97,12 @@ export interface FrozenSummary {
   upgradeRequired: boolean;
   plan: string;
   planDisplayName: string;
+  freeUsage?: {
+    inspections: { current: number; limit: number };
+    analyses: { current: number; limit: number };
+    agreements: { current: number; limit: number };
+    apiCalls: { current: number; limit: number };
+  };
 }
 
 export interface FrozenEntity {
@@ -1762,7 +1768,14 @@ export class PlanEnforcementService {
   async getFrozenEntitiesSummary(agencyId: string): Promise<FrozenSummary> {
     const agency = await this.prisma.agency.findUnique({
       where: { id: BigInt(agencyId) },
-      select: { id: true, plan: true },
+      select: { 
+        id: true, 
+        plan: true,
+        monthlyInspectionsUsed: true,
+        monthlySettlementsUsed: true,
+        monthlyScreeningsUsed: true,
+        monthlyApiCallsUsed: true,
+      },
     });
 
     if (!agency) {
@@ -1771,6 +1784,23 @@ export class PlanEnforcementService {
 
     const planConfig = getPlanByName(agency.plan) || PLANS_CONFIG.FREE;
     const limits = this.getPlanLimitsForAgency(agency.plan);
+    const freeLimits = getFreeUsageLimits(agency.plan);
+
+    // Calculate actual usage from records for current month
+    const now = new Date();
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const firstDayOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    // Count actual analyses created this month
+    const actualScreeningsCount = await this.prisma.tenantAnalysis.count({
+      where: {
+        agencyId: BigInt(agencyId),
+        analyzedAt: {
+          gte: firstDayOfMonth,
+          lt: firstDayOfNextMonth,
+        },
+      },
+    });
 
     const [activeContracts, frozenContracts, totalContracts] = await Promise.all([
       this.prisma.contract.count({
@@ -1832,6 +1862,24 @@ export class PlanEnforcementService {
       upgradeRequired: frozenContracts > 0 || frozenUsers > 0,
       plan: agency.plan,
       planDisplayName: planConfig.displayName,
+      freeUsage: {
+        inspections: {
+          current: agency.monthlyInspectionsUsed || 0,
+          limit: freeLimits.freeInspections === -1 ? -1 : freeLimits.freeInspections,
+        },
+        analyses: {
+          current: actualScreeningsCount || agency.monthlyScreeningsUsed || 0,
+          limit: freeLimits.freeSearches === -1 ? -1 : freeLimits.freeSearches,
+        },
+        agreements: {
+          current: agency.monthlySettlementsUsed || 0,
+          limit: freeLimits.freeSettlements === -1 ? -1 : freeLimits.freeSettlements,
+        },
+        apiCalls: {
+          current: agency.monthlyApiCallsUsed || 0,
+          limit: freeLimits.freeApiCalls === -1 ? -1 : freeLimits.freeApiCalls,
+        },
+      },
     };
   }
 

@@ -473,7 +473,31 @@ export function getAllPlansForDisplay(): PlanConfig[] {
 }
 
 export function getPlanByName(planName: string): PlanConfig | null {
-  return PLANS_CONFIG[planName] || null;
+  const baseConfig = PLANS_CONFIG[planName];
+  if (!baseConfig) return null;
+  
+  // Merge with any plan updates
+  const updates = planUpdates.get(planName);
+  if (!updates) return baseConfig;
+  
+  // Deep merge the updates with base config
+  const merged: PlanConfig = {
+    ...baseConfig,
+    ...updates,
+  };
+  
+  // Preserve base config values for undefined update fields
+  if (updates.maxProperties === undefined) merged.maxProperties = baseConfig.maxProperties;
+  if (updates.maxActiveContracts === undefined) merged.maxActiveContracts = baseConfig.maxActiveContracts;
+  if (updates.maxTenants === undefined) merged.maxTenants = baseConfig.maxTenants;
+  if (updates.maxOwners === undefined) merged.maxOwners = baseConfig.maxOwners;
+  if (updates.maxBrokers === undefined) merged.maxBrokers = baseConfig.maxBrokers;
+  if (updates.maxManagers === undefined) merged.maxManagers = baseConfig.maxManagers;
+  if (updates.maxInternalUsers === undefined) merged.maxInternalUsers = baseConfig.maxInternalUsers;
+  if (updates.features === undefined) merged.features = baseConfig.features;
+  if (updates.price === undefined) merged.price = baseConfig.price;
+  
+  return merged;
 }
 
 export function calculateUpgradeCost(

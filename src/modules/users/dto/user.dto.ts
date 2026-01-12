@@ -343,9 +343,12 @@ export class ChangePasswordDto {
   @IsString()
   currentPassword: string;
 
-  @ApiProperty({ minLength: 6 })
+  @ApiProperty({ 
+    minLength: 8,
+    description: 'Password must be at least 8 characters and contain uppercase, lowercase, number, and special character'
+  })
   @IsString()
-  @MinLength(6)
+  @MinLength(8, { message: 'Password must be at least 8 characters' })
   newPassword: string;
 }
 

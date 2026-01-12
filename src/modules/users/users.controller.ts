@@ -272,8 +272,8 @@ export class UsersController {
   @Patch(':id/status')
   @Roles(UserRole.CEO, UserRole.ADMIN, UserRole.AGENCY_ADMIN)
   @ApiOperation({ summary: 'Update user status' })
-  async updateStatus(@Param('id') id: string, @Body('status') status: string) {
-    return this.usersService.updateStatus(id, status);
+  async updateStatus(@Param('id') id: string, @Body('status') status: string, @CurrentUser() user: any) {
+    return this.usersService.updateStatus(id, status, user?.sub, user?.role as UserRole, user?.agencyId?.toString());
   }
 
   @Delete(':id')

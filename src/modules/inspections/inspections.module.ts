@@ -9,9 +9,10 @@ import { InspectionPdfService } from './services/inspection-pdf.service';
 import { InspectionSignatureService } from './services/inspection-signature.service';
 import { InspectionSignatureLinkService } from './services/inspection-signature-link.service';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { BillingCycleModule } from '../billing-cycle/billing-cycle.module';
 
 @Module({
-  imports: [NotificationsModule],
+  imports: [NotificationsModule, BillingCycleModule],
   controllers: [
     InspectionsController,
     InspectionMediaController,

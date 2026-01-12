@@ -250,10 +250,14 @@ export class ChatsService {
     }
 
     if (normalizedRole === 'ADMIN') {
-      const createdUsers = await this.prisma.user.findMany({
+      // Admin can communicate with: CEO, Agency Directors (AGENCY_ADMIN), Platform Managers (PLATFORM_MANAGER),
+      // Agency Managers (AGENCY_MANAGER), and Independent Property Owners (INDEPENDENT_OWNER)
+      const allowedRoles = ['CEO', 'AGENCY_ADMIN', 'PLATFORM_MANAGER', 'AGENCY_MANAGER', 'INDEPENDENT_OWNER'] as const;
+      
+      const availableUsers = await this.prisma.user.findMany({
         where: {
           id: { not: userIdBigInt },
-          createdBy: userIdBigInt,
+          role: { in: allowedRoles as any },
           status: 'ACTIVE',
         },
         select: {
@@ -263,29 +267,13 @@ export class ChatsService {
           phone: true,
           role: true,
         },
+        orderBy: [
+          { role: 'asc' },
+          { name: 'asc' },
+        ],
       });
 
-      const agencyAdmins = await this.prisma.user.findMany({
-        where: {
-          id: { not: userIdBigInt },
-          role: 'AGENCY_ADMIN',
-          status: 'ACTIVE',
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          phone: true,
-          role: true,
-        },
-      });
-
-      const allUsers = [...createdUsers, ...agencyAdmins];
-      const uniqueUsers = allUsers.filter((user, index, self) =>
-        index === self.findIndex(u => u?.id?.toString() === user?.id?.toString())
-      );
-
-      return uniqueUsers.map(u => ({
+      return availableUsers.map(u => ({
         id: u.id.toString(),
         name: u.name,
         email: u.email,
@@ -373,11 +361,12 @@ export class ChatsService {
     }
 
     if (normalizedRole === 'REPRESENTATIVE') {
-      // REPRESENTATIVE can chat only with ADMIN users
+      // REPRESENTATIVE can chat only with ADMIN and PLATFORM_MANAGER
+      const allowedRoles = ['ADMIN', 'PLATFORM_MANAGER'] as const;
       const adminUsers = await this.prisma.user.findMany({
         where: {
           id: { not: userIdBigInt },
-          role: 'ADMIN',
+          role: { in: allowedRoles as any },
           status: 'ACTIVE',
         },
         select: {
@@ -387,6 +376,10 @@ export class ChatsService {
           phone: true,
           role: true,
         },
+        orderBy: [
+          { role: 'asc' },
+          { name: 'asc' },
+        ],
       });
 
       return adminUsers.map(u => ({
@@ -398,8 +391,15 @@ export class ChatsService {
       }));
     }
 
-    if (normalizedRole === 'BROKER' && userAgencyId) {
-      const agencyUsers = await this.prisma.user.findMany({
+    if (normalizedRole === 'BROKER') {
+      // Realtors can only chat with:
+      // 1. Managers (AGENCY_MANAGER, AGENCY_ADMIN) from same agency
+      // 2. Property owners (PROPRIETARIO, INDEPENDENT_OWNER) whose properties they manage
+      // 3. Tenants (INQUILINO) of properties they manage
+      // 4. Platform admins (CEO, ADMIN)
+      
+      // Get managers from the same agency (if agencyId exists)
+      const managers = userAgencyId ? await this.prisma.user.findMany({
         where: {
           agencyId: BigInt(userAgencyId),
           id: { not: userIdBigInt },
@@ -413,13 +413,17 @@ export class ChatsService {
           phone: true,
           role: true,
         },
-      });
+      }) : [];
 
+      // Get properties assigned to this broker
       const brokerProperties = await this.prisma.property.findMany({
         where: {
           brokerId: userIdBigInt,
+          deleted: false,
         },
         select: {
+          ownerId: true,
+          tenantId: true,
           contracts: {
             where: { deleted: false },
             select: {
@@ -437,12 +441,73 @@ export class ChatsService {
         },
       });
 
+      // Get unique owner IDs from properties
+      const ownerIds = brokerProperties
+        .map(p => p.ownerId)
+        .filter((id): id is bigint => id !== null)
+        .map(id => id.toString());
+
+      // Get property owners (only those whose properties the broker manages)
+      const owners = ownerIds.length > 0 ? await this.prisma.user.findMany({
+        where: {
+          id: { in: ownerIds.map(id => BigInt(id)) },
+          role: { in: ['PROPRIETARIO', 'INDEPENDENT_OWNER'] },
+          status: 'ACTIVE',
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      }) : [];
+
+      // Get tenants from contracts
       const tenantUsers = brokerProperties
         .flatMap(p => p.contracts)
         .filter(c => c.tenantUser)
         .map(c => c.tenantUser);
 
-      const allUsers = [...agencyUsers, ...tenantUsers];
+      // Also get tenants directly from properties (if no contract yet)
+      const tenantIds = brokerProperties
+        .map(p => p.tenantId)
+        .filter((id): id is bigint => id !== null)
+        .map(id => id.toString());
+      
+      const directTenants = tenantIds.length > 0 ? await this.prisma.user.findMany({
+        where: {
+          id: { in: tenantIds.map(id => BigInt(id)) },
+          role: 'INQUILINO',
+          status: 'ACTIVE',
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      }) : [];
+
+      // Get platform admins
+      const platformAdmins = await this.prisma.user.findMany({
+        where: {
+          role: { in: ['CEO', 'ADMIN'] },
+          status: 'ACTIVE',
+          id: { not: userIdBigInt },
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      });
+
+      // Combine all allowed users
+      const allUsers = [...managers, ...owners, ...tenantUsers, ...directTenants, ...platformAdmins];
       const uniqueUsers = allUsers.filter((user, index, self) =>
         index === self.findIndex(u => u?.id?.toString() === user?.id?.toString())
       );
@@ -514,7 +579,188 @@ export class ChatsService {
     }
 
     if (normalizedRole === 'PROPRIETARIO' || normalizedRole === 'INDEPENDENT_OWNER') {
-      // Get all tenants registered by this owner (not just those with contracts)
+      // Independent owners can only chat with:
+      // 1. Tenants (their own tenants)
+      // 2. Managers (building managers)
+      // 3. Platform admins (CEO, ADMIN)
+      
+      // Get all tenants registered by this owner
+      const ownerTenants = await this.prisma.user.findMany({
+        where: {
+          ownerId: userIdBigInt,
+          role: 'INQUILINO',
+          status: 'ACTIVE',
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      });
+
+      // Get building managers
+      const buildingManagers = await this.prisma.user.findMany({
+        where: {
+          role: 'BUILDING_MANAGER',
+          status: 'ACTIVE',
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      });
+
+      // Get platform admins (CEO, ADMIN)
+      const platformAdmins = await this.prisma.user.findMany({
+        where: {
+          role: { in: ['CEO', 'ADMIN'] },
+          status: 'ACTIVE',
+          id: { not: userIdBigInt },
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      });
+
+      // Combine all allowed users
+      const allAllowedUsers = [...ownerTenants, ...buildingManagers, ...platformAdmins];
+      const uniqueUsers = allAllowedUsers.filter((user, index, self) =>
+        index === self.findIndex(u => u?.id?.toString() === user?.id?.toString())
+      );
+
+      return uniqueUsers.map(u => ({
+        id: u.id.toString(),
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        role: u.role,
+      }));
+    }
+
+    if (normalizedRole === 'BROKER') {
+      // Realtors can only chat with:
+      // 1. Managers (AGENCY_MANAGER, AGENCY_ADMIN)
+      // 2. Property owners (PROPRIETARIO, INDEPENDENT_OWNER) - owners of properties they manage
+      // 3. Tenants (INQUILINO) - tenants of properties they manage
+      // 4. Platform admins (CEO, ADMIN)
+      
+      // Get properties assigned to this broker
+      const brokerProperties = await this.prisma.property.findMany({
+        where: {
+          brokerId: userIdBigInt,
+          deleted: false,
+        },
+        select: {
+          ownerId: true,
+          tenantId: true,
+          agencyId: true,
+        },
+      });
+
+      const ownerIds = brokerProperties
+        .map(p => p.ownerId)
+        .filter((id): id is bigint => id !== null)
+        .map(id => id.toString());
+      const tenantIds = brokerProperties
+        .map(p => p.tenantId)
+        .filter((id): id is bigint => id !== null)
+        .map(id => id.toString());
+      const agencyIds = brokerProperties
+        .map(p => p.agencyId)
+        .filter((id): id is bigint => id !== null)
+        .map(id => id.toString());
+
+      // Get managers from the same agency
+      const managers = await this.prisma.user.findMany({
+        where: {
+          role: { in: ['AGENCY_MANAGER', 'AGENCY_ADMIN'] },
+          agencyId: userAgencyId ? BigInt(userAgencyId) : undefined,
+          status: 'ACTIVE',
+          id: { not: userIdBigInt },
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      });
+
+      // Get property owners (only those whose properties the broker manages)
+      const owners = ownerIds.length > 0 ? await this.prisma.user.findMany({
+        where: {
+          id: { in: ownerIds.map(id => BigInt(id)) },
+          role: { in: ['PROPRIETARIO', 'INDEPENDENT_OWNER'] },
+          status: 'ACTIVE',
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      }) : [];
+
+      // Get tenants (only those whose properties the broker manages)
+      const tenants = tenantIds.length > 0 ? await this.prisma.user.findMany({
+        where: {
+          id: { in: tenantIds.map(id => BigInt(id)) },
+          role: 'INQUILINO',
+          status: 'ACTIVE',
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      }) : [];
+
+      // Get platform admins
+      const platformAdmins = await this.prisma.user.findMany({
+        where: {
+          role: { in: ['CEO', 'ADMIN'] },
+          status: 'ACTIVE',
+          id: { not: userIdBigInt },
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      });
+
+      // Combine all allowed users
+      const allAllowedUsers = [...managers, ...owners, ...tenants, ...platformAdmins];
+      const uniqueUsers = allAllowedUsers.filter((user, index, self) =>
+        index === self.findIndex(u => u?.id?.toString() === user?.id?.toString())
+      );
+
+      return uniqueUsers.map(u => ({
+        id: u.id.toString(),
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        role: u.role,
+      }));
+    }
+
+    if (normalizedRole === 'PROPRIETARIO') {
+      // Regular owners (not independent) can also chat with agency users
       const ownerTenants = await this.prisma.user.findMany({
         where: {
           ownerId: userIdBigInt,

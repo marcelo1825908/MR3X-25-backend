@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../config/prisma.service';
 import { CreateExtrajudicialNotificationDto } from './dto/create-extrajudicial-notification.dto';
 import {
@@ -10,10 +10,18 @@ import {
   SendNotificationDto,
 } from './dto/update-extrajudicial-notification.dto';
 import * as crypto from 'crypto';
+import { LegalValidationService } from './services/legal-validation.service';
+import { AsaasPaymentService } from '../asaas/asaas-payment.service';
 
 @Injectable()
 export class ExtrajudicialNotificationsService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(ExtrajudicialNotificationsService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private legalValidation: LegalValidationService,
+    private asaasPaymentService?: AsaasPaymentService,
+  ) {}
 
   private generateNotificationToken(): string {
     const year = new Date().getFullYear();
@@ -45,6 +53,18 @@ export class ExtrajudicialNotificationsService {
   }
 
   async create(data: CreateExtrajudicialNotificationDto, userId: string, clientIP?: string, userAgent?: string) {
+    // Validate attorney information if lawyer fees are present
+    if (data.lawyerFees && data.lawyerFees > 0) {
+      const validation = this.legalValidation.validateAttorneyInfo(
+        data.lawyerFees,
+        data.attorneyName,
+        data.attorneyOAB,
+      );
+      if (!validation.valid) {
+        throw new BadRequestException(validation.error);
+      }
+    }
+
     const property = await this.prisma.property.findUnique({
       where: { id: BigInt(data.propertyId) },
     });
@@ -96,6 +116,8 @@ export class ExtrajudicialNotificationsService {
         interestAmount: data.interestAmount || null,
         correctionAmount: data.correctionAmount || null,
         lawyerFees: data.lawyerFees || null,
+        attorneyName: data.attorneyName || null,
+        attorneyOAB: data.attorneyOAB || null,
         totalAmount: data.totalAmount,
 
         deadlineDays: data.deadlineDays,
@@ -321,6 +343,17 @@ export class ExtrajudicialNotificationsService {
       throw new ForbiddenException('Can only update draft notifications');
     }
 
+    // Validate attorney information if lawyer fees are present
+    const lawyerFees = data.lawyerFees !== undefined ? data.lawyerFees : (notification.lawyerFees ? Number(notification.lawyerFees) : null);
+    if (lawyerFees && lawyerFees > 0) {
+      const attorneyName = data.attorneyName !== undefined ? data.attorneyName : notification.attorneyName;
+      const attorneyOAB = data.attorneyOAB !== undefined ? data.attorneyOAB : notification.attorneyOAB;
+      const validation = this.legalValidation.validateAttorneyInfo(lawyerFees, attorneyName || undefined, attorneyOAB || undefined);
+      if (!validation.valid) {
+        throw new BadRequestException(validation.error);
+      }
+    }
+
     const updateData: any = {};
     if (data.type) updateData.type = data.type;
     if (data.priority) updateData.priority = data.priority;
@@ -334,6 +367,8 @@ export class ExtrajudicialNotificationsService {
     if (data.interestAmount !== undefined) updateData.interestAmount = data.interestAmount;
     if (data.correctionAmount !== undefined) updateData.correctionAmount = data.correctionAmount;
     if (data.lawyerFees !== undefined) updateData.lawyerFees = data.lawyerFees;
+    if (data.attorneyName !== undefined) updateData.attorneyName = data.attorneyName;
+    if (data.attorneyOAB !== undefined) updateData.attorneyOAB = data.attorneyOAB;
     if (data.totalAmount !== undefined) updateData.totalAmount = data.totalAmount;
     if (data.consequencesText !== undefined) updateData.consequencesText = data.consequencesText;
     if (data.notes !== undefined) updateData.notes = data.notes;
@@ -492,8 +527,40 @@ export class ExtrajudicialNotificationsService {
       data: updateData,
     });
 
+    const updatedNotification = await this.findOne(id);
     const signerType = data.creditorSignature ? 'CREDITOR' : data.debtorSignature ? 'DEBTOR' : 'WITNESS';
-    await this.createAudit(id, `SIGNED_BY_${signerType}`, userId, clientIP, userAgent, {});
+    await this.createAudit(id, `SIGNED_BY_${signerType}`, userId, clientIP, userAgent, {
+      hashFinal: updatedNotification.hashFinal,
+    });
+
+    // If debtor signed, automatically create Asaas payment if notification has financial values
+    if (data.debtorSignature && this.asaasPaymentService) {
+      try {
+        const updatedNotification = await this.findOne(id);
+        if (updatedNotification.totalAmount && Number(updatedNotification.totalAmount) > 0) {
+          // Check if Asaas is enabled (skip payment creation for now - to be implemented)
+          // TODO: Implement createNotificationPayment method in AsaasPaymentService
+          // const asaasStatus = await this.asaasPaymentService['asaasService']?.getStatus?.();
+          // if (asaasStatus?.enabled) {
+          //   // Create payment in Asaas
+          //   const paymentResult = await this.asaasPaymentService.createNotificationPayment({
+          //     notificationId: id,
+          //     userId,
+          //     billingType: 'UNDEFINED', // Default, can be changed by user later
+          //   });
+          //
+          //   if (paymentResult.success) {
+          //     this.logger.log(`Created Asaas payment for notification ${id} after debtor signature`);
+          //   } else {
+          //     this.logger.warn(`Failed to create Asaas payment for notification ${id}: ${paymentResult.error}`);
+          //   }
+          // }
+        }
+      } catch (error) {
+        this.logger.error(`Error creating Asaas payment after debtor signature for notification ${id}:`, error);
+        // Don't fail the signature if Asaas payment creation fails
+      }
+    }
 
     return this.findOne(id);
   }
@@ -560,6 +627,18 @@ export class ExtrajudicialNotificationsService {
 
     if (!notification) {
       throw new NotFoundException('Notification not found');
+    }
+
+    // Validate CNJ process number if provided
+    if (data.judicialProcessNumber && data.judicialProcessNumber.trim() !== '') {
+      const isValid = this.legalValidation.validateCNJProcessNumber(data.judicialProcessNumber);
+      if (!isValid) {
+        throw new BadRequestException(
+          'Número de processo inválido. Use o formato CNJ: NNNNNNN-DD.AAAA.J.TR.OOOO (ex: 0000123-45.2024.8.26.0100)',
+        );
+      }
+      // Format the process number
+      data.judicialProcessNumber = this.legalValidation.formatCNJProcessNumber(data.judicialProcessNumber);
     }
 
     await this.prisma.extrajudicialNotification.update({
@@ -710,6 +789,8 @@ export class ExtrajudicialNotificationsService {
       interestAmount: notification.interestAmount?.toString() || null,
       correctionAmount: notification.correctionAmount?.toString() || null,
       lawyerFees: notification.lawyerFees?.toString() || null,
+      attorneyName: notification.attorneyName || null,
+      attorneyOAB: notification.attorneyOAB || null,
       totalAmount: notification.totalAmount?.toString() || null,
       deadlineDate: notification.deadlineDate?.toISOString() || null,
       sentAt: notification.sentAt?.toISOString() || null,

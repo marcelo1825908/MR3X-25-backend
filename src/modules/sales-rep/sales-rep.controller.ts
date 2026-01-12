@@ -16,6 +16,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { SalesMessageService } from './sales-message.service';
 import { SalesRepService } from './sales-rep.service';
+import { CommissionService } from './commission.service';
 
 @Controller('sales-rep')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -24,12 +25,57 @@ export class SalesRepController {
   constructor(
     private readonly salesMessageService: SalesMessageService,
     private readonly salesRepService: SalesRepService,
+    private readonly commissionService: CommissionService,
   ) {}
   @Get('stats')
   async getStats(@Request() req: any) {
     const salesRepId = BigInt(req.user.sub);
     return this.salesRepService.getStats(salesRepId);
   }
+
+  // ==================== LEAD ENDPOINTS ====================
+
+  @Get('leads')
+  async getLeads(@Request() req: any, @Query() query: any) {
+    const salesRepId = BigInt(req.user.sub);
+    return this.salesRepService.getLeads(salesRepId, {
+      status: query.status,
+      source: query.source,
+      search: query.search,
+    });
+  }
+
+  @Post('leads')
+  async createLead(@Request() req: any, @Body() body: any) {
+    const salesRepId = BigInt(req.user.sub);
+    return this.salesRepService.createLead(salesRepId, body);
+  }
+
+  @Put('leads/:id')
+  async updateLead(@Request() req: any, @Param('id') id: string, @Body() body: any) {
+    const salesRepId = BigInt(req.user.sub);
+    return this.salesRepService.updateLead(id, salesRepId, body);
+  }
+
+  @Delete('leads/:id')
+  async deleteLead(@Request() req: any, @Param('id') id: string) {
+    const salesRepId = BigInt(req.user.sub);
+    return this.salesRepService.deleteLead(id, salesRepId);
+  }
+
+  @Post('leads/:id/activities')
+  async addLeadActivity(@Request() req: any, @Param('id') id: string, @Body() body: any) {
+    const salesRepId = BigInt(req.user.sub);
+    return this.salesRepService.addLeadActivity(id, salesRepId, body);
+  }
+
+  @Post('leads/:id/convert-to-prospect')
+  async convertLeadToProspect(@Request() req: any, @Param('id') id: string, @Body() body: any) {
+    const salesRepId = BigInt(req.user.sub);
+    return this.salesRepService.convertLeadToProspect(id, salesRepId, body);
+  }
+
+  // ==================== PROSPECT ENDPOINTS ====================
 
   @Get('prospects')
   async getProspects(@Request() req: any) {
@@ -78,6 +124,11 @@ export class SalesRepController {
   @Post('proposals/:id/send')
   async sendProposal(@Param('id') id: string) {
     return this.salesRepService.sendProposal(id);
+  }
+
+  @Post('proposals/:id/accept')
+  async acceptProposal(@Param('id') id: string, @Body() body?: { agencyId?: string; agencyName?: string }) {
+    return this.salesRepService.acceptProposal(id, body);
   }
 
   @Delete('proposals/:id')

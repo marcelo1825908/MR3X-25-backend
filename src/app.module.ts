@@ -33,6 +33,9 @@ import { AsaasModule } from './modules/asaas/asaas.module';
 import { SplitConfigurationModule } from './modules/split-configuration/split-configuration.module';
 import { AsaasWalletModule } from './modules/asaas-wallet/asaas-wallet.module';
 import { BillingCycleModule } from './modules/billing-cycle/billing-cycle.module';
+import { PaymentRemindersModule } from './modules/payment-reminders/payment-reminders.module';
+import { FinancialReportsModule } from './modules/financial-reports/financial-reports.module';
+import { VerificationModule } from './modules/verification/verification.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -74,6 +77,9 @@ import { HealthController } from './health.controller';
     SplitConfigurationModule,
     AsaasWalletModule,
     BillingCycleModule,
+    PaymentRemindersModule,
+    FinancialReportsModule,
+    VerificationModule,
   ],
   controllers: [HealthController],
 })

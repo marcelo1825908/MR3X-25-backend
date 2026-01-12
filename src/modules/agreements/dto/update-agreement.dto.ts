@@ -53,6 +53,16 @@ export class UpdateAgreementDto {
   @IsNumber()
   fineAmount?: number;
 
+  @ApiPropertyOptional({ description: 'Interest percentage (for automatic calculation)' })
+  @IsOptional()
+  @IsNumber()
+  interestPercent?: number;
+
+  @ApiPropertyOptional({ description: 'Interest amount (calculated or fixed)' })
+  @IsOptional()
+  @IsNumber()
+  interestAmount?: number;
+
   @ApiPropertyOptional({ description: 'Discount amount' })
   @IsOptional()
   @IsNumber()

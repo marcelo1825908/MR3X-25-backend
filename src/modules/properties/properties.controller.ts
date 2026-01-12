@@ -64,21 +64,29 @@ export class PropertiesController {
     let createdById: string | undefined;
     let effectiveAgencyId: string | undefined = agencyId;
     let effectiveOwnerId: string | undefined = ownerId;
+    let brokerId: string | undefined;
 
     if (user?.role === 'CEO') {
+      // CEO sees all properties
     } else if (user?.role === 'ADMIN') {
       createdById = user.sub;
     } else if (user?.role === 'INDEPENDENT_OWNER') {
       createdById = user.sub;
     } else if (user?.role === 'PROPRIETARIO') {
       effectiveOwnerId = user.sub;
+    } else if (user?.role === 'BROKER') {
+      // Realtors can only see properties assigned to them
+      brokerId = user.brokerId || user.sub;
+      if (user?.agencyId) {
+        effectiveAgencyId = user.agencyId;
+      }
     } else if (user?.agencyId) {
       effectiveAgencyId = user.agencyId;
     } else {
       createdById = user?.sub;
     }
 
-    return this.propertiesService.findAll({ skip, take, agencyId: effectiveAgencyId, status, ownerId: effectiveOwnerId, createdById, search });
+    return this.propertiesService.findAll({ skip, take, agencyId: effectiveAgencyId, status, ownerId: effectiveOwnerId, createdById, brokerId, search });
   }
 
   @Post(':propertyId/images')

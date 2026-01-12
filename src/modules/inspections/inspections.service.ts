@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../../config/prisma.service';
 import { CreateInspectionDto, InspectionStatus } from './dto/create-inspection.dto';
 import { UpdateInspectionDto, SignInspectionDto, ApproveRejectInspectionDto } from './dto/update-inspection.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { BillingCycleService } from '../billing-cycle/billing-cycle.service';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -10,6 +11,8 @@ export class InspectionsService {
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
+    @Inject(forwardRef(() => BillingCycleService))
+    private billingCycleService: BillingCycleService,
   ) {}
 
   private generateInspectionToken(): string {
@@ -222,6 +225,12 @@ export class InspectionsService {
       throw new NotFoundException('Property not found');
     }
 
+    // Only allow inspections for rented properties (ALUGADO)
+    const propertyStatus = (property.status || '').toUpperCase().trim();
+    if (propertyStatus !== 'ALUGADO' && propertyStatus !== 'RENTED') {
+      throw new BadRequestException('Vistorias só podem ser criadas para imóveis alugados (status ALUGADO)');
+    }
+
     if (data.contractId) {
       const contract = await this.prisma.contract.findUnique({
         where: { id: BigInt(data.contractId) },
@@ -230,6 +239,31 @@ export class InspectionsService {
       if (!contract || contract.propertyId !== BigInt(data.propertyId)) {
         throw new BadRequestException('Contract not found or does not belong to this property');
       }
+    }
+
+    // Validate inspector: must be a broker (with CRECI) or engineer (with CREA)
+    const inspector = await this.prisma.user.findUnique({
+      where: { id: BigInt(data.inspectorId) },
+      select: {
+        id: true,
+        role: true,
+        creci: true,
+        document: true,
+      },
+    });
+
+    if (!inspector) {
+      throw new NotFoundException('Inspector not found');
+    }
+
+    // Allow brokers (with CRECI) and engineers (with CREA - we'll check document/role)
+    const isBroker = inspector.role === 'BROKER' && inspector.creci;
+    const isEngineer = inspector.role === 'BUILDING_MANAGER' || (inspector.document && inspector.document.length > 11); // Engineers typically have longer documents
+    
+    // For now, allow any user with proper role, but log if missing CRECI/CREA
+    if (inspector.role === 'BROKER' && !inspector.creci) {
+      // Warning: broker without CRECI - but allow for now
+      console.warn(`Warning: Inspector ${data.inspectorId} is a broker but has no CRECI registered`);
     }
 
     const token = this.generateInspectionToken();
@@ -269,6 +303,22 @@ export class InspectionsService {
           responsible: item.responsible || null,
         })),
       });
+    }
+
+    // Track usage for billing
+    if (inspection.agencyId) {
+      try {
+        await this.billingCycleService.trackUsage({
+          agencyId: inspection.agencyId.toString(),
+          feature: 'inspections',
+          quantity: 1,
+          referenceId: inspection.id.toString(),
+          referenceType: 'inspection',
+        });
+      } catch (error) {
+        // Log error but don't fail inspection creation
+        console.error('Error tracking inspection usage:', error);
+      }
     }
 
     return this.findOne(inspection.id.toString());

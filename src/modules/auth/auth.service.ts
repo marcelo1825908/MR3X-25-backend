@@ -67,7 +67,7 @@ export class AuthService {
     };
   }
 
-  async login(dto: LoginDto) {
+  async login(dto: LoginDto, ip?: string, userAgent?: string) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
       include: { agency: true },
@@ -123,6 +123,28 @@ export class AuthService {
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       },
     });
+
+    // Log login event to audit
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          event: 'LOGIN',
+          userId: user.id,
+          entity: 'USER',
+          entityId: user.id,
+          ip: ip || null,
+          userAgent: userAgent || null,
+          dataAfter: JSON.stringify({
+            loginTime: new Date().toISOString(),
+            role: user.role,
+            agencyId: user.agencyId?.toString(),
+          }),
+        },
+      });
+    } catch (error) {
+      console.error('Error logging login event:', error);
+      // Don't fail login if audit logging fails
+    }
 
     return {
       accessToken,
@@ -294,12 +316,32 @@ export class AuthService {
     return { message: 'Password reset successfully' };
   }
 
-  async logout(userId: bigint, token?: string) {
+  async logout(userId: bigint, token?: string, ip?: string, userAgent?: string) {
     if (token) {
       await this.prisma.refreshToken.updateMany({
         where: { token, userId },
         data: { isRevoked: true },
       });
+    }
+
+    // Log logout event to audit
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          event: 'LOGOUT',
+          userId: userId,
+          entity: 'USER',
+          entityId: userId,
+          ip: ip || null,
+          userAgent: userAgent || null,
+          dataAfter: JSON.stringify({
+            logoutTime: new Date().toISOString(),
+          }),
+        },
+      });
+    } catch (error) {
+      console.error('Error logging logout event:', error);
+      // Don't fail logout if audit logging fails
     }
 
     return { message: 'Logged out successfully' };

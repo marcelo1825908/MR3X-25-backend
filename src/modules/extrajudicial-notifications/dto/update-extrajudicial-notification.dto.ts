@@ -86,6 +86,16 @@ export class UpdateExtrajudicialNotificationDto {
   @Min(0)
   lawyerFees?: number;
 
+  @ApiPropertyOptional({ description: 'Attorney name (required if lawyerFees > 0)' })
+  @IsOptional()
+  @IsString()
+  attorneyName?: string;
+
+  @ApiPropertyOptional({ description: 'Attorney OAB number (required if lawyerFees > 0)' })
+  @IsOptional()
+  @IsString()
+  attorneyOAB?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()

@@ -17,6 +17,7 @@ import {
   getPlanByName as getPlanConfigByName,
   calculateUpgradeCost,
   MicrotransactionPricing,
+  getFreeUsageLimits,
 } from './plans.data';
 import { UserRole, MicrotransactionType, MicrotransactionStatus } from '@prisma/client';
 
@@ -83,6 +84,12 @@ export interface PlanUsageDTO {
     monthlyPrice: number;
     apiAddOnPrice: number | null;
     supportTier: string;
+  };
+  freeUsage?: {
+    inspections: { current: number; limit: number };
+    analyses: { current: number; limit: number };
+    agreements: { current: number; limit: number };
+    apiCalls: { current: number; limit: number };
   };
 }
 
@@ -173,17 +180,33 @@ export class PlansService {
       // Get the full config to access free usage limits and all role limits
       const planConfig = PLANS_CONFIG[plan.name];
       const planUpdate = updates.get(plan.name);
+      
+      // Always use PLANS_CONFIG as source of truth for free usage limits
+      // Only override if there's an explicit update
+      const freeInspections = planUpdate?.freeInspections !== undefined 
+        ? planUpdate.freeInspections 
+        : (planConfig?.freeInspections ?? 0);
+      const freeSearches = planUpdate?.freeSearches !== undefined 
+        ? planUpdate.freeSearches 
+        : (planConfig?.freeSearches ?? 0);
+      const freeSettlements = planUpdate?.freeSettlements !== undefined 
+        ? planUpdate.freeSettlements 
+        : (planConfig?.freeSettlements ?? 0);
+      const freeApiCalls = planUpdate?.freeApiCalls !== undefined 
+        ? planUpdate.freeApiCalls 
+        : (planConfig?.freeApiCalls ?? 0);
+      
       return {
         ...plan,
         subscribers: planCounts.get(plan.name) || 0,
         features: Array.isArray(plan.features) ? plan.features : [],
         createdAt: plan.createdAt.toISOString(),
         updatedAt: plan.updatedAt.toISOString(),
-        // Include free usage limits (check updates first, then config default)
-        freeInspections: planUpdate?.freeInspections ?? planConfig?.freeInspections ?? 0,
-        freeSearches: planUpdate?.freeSearches ?? planConfig?.freeSearches ?? 0,
-        freeSettlements: planUpdate?.freeSettlements ?? planConfig?.freeSettlements ?? 0,
-        freeApiCalls: planUpdate?.freeApiCalls ?? planConfig?.freeApiCalls ?? 0,
+        // Include free usage limits (always from PLANS_CONFIG unless explicitly updated)
+        freeInspections,
+        freeSearches,
+        freeSettlements,
+        freeApiCalls,
         // Include all role-based limits (check updates first, then config default)
         maxTenants: planUpdate?.maxTenants ?? planConfig?.maxTenants ?? 1,        // Inquilinos
         tenantLimit: planUpdate?.maxTenants ?? planConfig?.maxTenants ?? 1,
@@ -303,6 +326,10 @@ export class PlansService {
         frozenUsersCount: true,
         activeContractsCount: true,
         activeUsersCount: true,
+        monthlyInspectionsUsed: true,
+        monthlySettlementsUsed: true,
+        monthlyScreeningsUsed: true,
+        monthlyApiCallsUsed: true,
       },
     });
 
@@ -312,6 +339,45 @@ export class PlansService {
 
     const planName = agency.plan || 'FREE';
     const planConfig = getPlanConfigByName(planName) || PLANS_CONFIG.FREE;
+    const freeLimits = getFreeUsageLimits(planName);
+
+    // Calculate actual usage from records for current month
+    const now = new Date();
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const firstDayOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    // Count actual analyses created this month
+    const actualScreeningsCount = await this.prisma.tenantAnalysis.count({
+      where: {
+        agencyId: BigInt(agencyId),
+        analyzedAt: {
+          gte: firstDayOfMonth,
+          lt: firstDayOfNextMonth,
+        },
+      },
+    });
+
+    // Count actual agreements created this month
+    const actualAgreementsCount = await this.prisma.agreement.count({
+      where: {
+        agencyId: BigInt(agencyId),
+        createdAt: {
+          gte: firstDayOfMonth,
+          lt: firstDayOfNextMonth,
+        },
+      },
+    });
+
+    // Count actual inspections created this month
+    const actualInspectionsCount = await this.prisma.inspection.count({
+      where: {
+        agencyId: BigInt(agencyId),
+        createdAt: {
+          gte: firstDayOfMonth,
+          lt: firstDayOfNextMonth,
+        },
+      },
+    });
 
     const activeContracts = await this.prisma.contract.count({
       where: {
@@ -381,6 +447,24 @@ export class PlansService {
         monthlyPrice: planConfig.price,
         apiAddOnPrice: planConfig.apiAddOnPrice,
         supportTier: planConfig.supportTier,
+      },
+      freeUsage: {
+        inspections: {
+          current: actualInspectionsCount ?? agency.monthlyInspectionsUsed ?? 0,
+          limit: freeLimits.freeInspections === -1 ? -1 : freeLimits.freeInspections,
+        },
+        analyses: {
+          current: actualScreeningsCount ?? agency.monthlyScreeningsUsed ?? 0,
+          limit: freeLimits.freeSearches === -1 ? -1 : freeLimits.freeSearches,
+        },
+        agreements: {
+          current: actualAgreementsCount ?? agency.monthlySettlementsUsed ?? 0,
+          limit: freeLimits.freeSettlements === -1 ? -1 : freeLimits.freeSettlements,
+        },
+        apiCalls: {
+          current: agency.monthlyApiCallsUsed || 0,
+          limit: freeLimits.freeApiCalls === -1 ? -1 : freeLimits.freeApiCalls,
+        },
       },
     };
   }
@@ -723,6 +807,9 @@ export class PlansService {
     }
 
     if (userRole === UserRole.CEO) {
+      // Get old plan config before update
+      const oldConfig = getPlanConfigByName(plan.name);
+      
       const updateData: Partial<PlanConfig> = {
         price: data.price,
         maxActiveContracts: data.contractLimit ?? data.propertyLimit,
@@ -741,6 +828,15 @@ export class PlansService {
         freeApiCalls: data.freeApiCalls,
       };
       setPlanUpdate(plan.name, updateData);
+      
+      // Get new plan config after update
+      const newConfig = getPlanConfigByName(plan.name);
+      
+      // Immediately enforce plan limit changes for all agencies using this plan
+      if (oldConfig && newConfig) {
+        await this.enforcePlanLimitChanges(plan.name, oldConfig, newConfig);
+      }
+      
       return this.getPlanByName(plan.name);
     }
 
@@ -777,7 +873,19 @@ export class PlansService {
         freeSettlements: data.freeSettlements,
         freeApiCalls: data.freeApiCalls,
       };
+      // Get old plan config before update
+      const oldConfig = getPlanConfigByName(name);
+      
       setPlanUpdate(name, updateData);
+      
+      // Get new plan config after update
+      const newConfig = getPlanConfigByName(name);
+      
+      // Immediately enforce plan limit changes for all agencies using this plan
+      if (oldConfig && newConfig) {
+        await this.enforcePlanLimitChanges(name, oldConfig, newConfig);
+      }
+      
       return this.getPlanByName(name);
     }
 
@@ -902,10 +1010,21 @@ export class PlansService {
     if (request.requestedFeatures) updateData.features = JSON.parse(request.requestedFeatures);
     if (request.requestedDescription !== null) updateData.description = request.requestedDescription;
 
+    // Get old plan config before update
+    const oldConfig = getPlanConfigByName(request.planName);
+    
     setPlanUpdate(request.planName, {
       ...updateData,
       updatedAt: new Date(),
     });
+    
+    // Get new plan config after update
+    const newConfig = getPlanConfigByName(request.planName);
+    
+    // Immediately enforce plan limit changes for all agencies using this plan
+    if (oldConfig && newConfig) {
+      await this.enforcePlanLimitChanges(request.planName, oldConfig, newConfig);
+    }
 
     const updatedRequest = await this.prisma.planModificationRequest.update({
       where: { id: BigInt(requestId) },
@@ -1696,5 +1815,214 @@ export class PlansService {
     }
 
     return { allowed: true };
+  }
+
+  /**
+   * Immediately enforce plan limit changes when a plan is updated.
+   * This ensures that:
+   * - If limits are reduced, excess entities are frozen
+   * - If limits are increased, previously frozen entities are unfrozen
+   * - The plan is the single source of truth for access control
+   */
+  private async enforcePlanLimitChanges(planName: string, oldConfig: PlanConfig, newConfig: PlanConfig): Promise<void> {
+    try {
+      // Find all agencies using this plan
+      const agencies = await this.prisma.agency.findMany({
+        where: { plan: planName },
+        select: { id: true },
+      });
+
+      // Find all independent owners using this plan
+      const independentOwners = await this.prisma.user.findMany({
+        where: { 
+          plan: planName,
+          role: UserRole.INDEPENDENT_OWNER,
+        },
+        select: { id: true },
+      });
+
+      // Process agencies
+      for (const agency of agencies) {
+        const agencyId = agency.id.toString();
+        
+        // Check and enforce contract limits
+        if (newConfig.maxActiveContracts !== undefined && 
+            oldConfig.maxActiveContracts !== newConfig.maxActiveContracts) {
+          if (newConfig.maxActiveContracts < oldConfig.maxActiveContracts) {
+            // Limit reduced - freeze excess contracts
+            await this.planEnforcement.freezeExcessContracts(agencyId, newConfig.maxActiveContracts);
+          } else {
+            // Limit increased - unfreeze contracts
+            await this.planEnforcement.unfreezeContracts(agencyId, newConfig.maxActiveContracts);
+          }
+        }
+
+        // Check and enforce user limits
+        const newUserLimit = newConfig.maxInternalUsers === -1 ? 9999 : newConfig.maxInternalUsers;
+        const oldUserLimit = oldConfig.maxInternalUsers === -1 ? 9999 : oldConfig.maxInternalUsers;
+        if (newUserLimit !== oldUserLimit) {
+          if (newUserLimit < oldUserLimit) {
+            // Limit reduced - freeze excess users
+            await this.planEnforcement.freezeExcessUsers(agencyId, newUserLimit);
+          } else {
+            // Limit increased - unfreeze users
+            await this.planEnforcement.unfreezeUsers(agencyId, newUserLimit);
+          }
+        }
+
+        // Check and enforce property limits
+        if (newConfig.maxProperties !== undefined && 
+            oldConfig.maxProperties !== newConfig.maxProperties) {
+          if (newConfig.maxProperties < oldConfig.maxProperties) {
+            // Limit reduced - freeze excess properties
+            await this.planEnforcement.freezeExcessProperties(agencyId, newConfig.maxProperties);
+          } else {
+            // Limit increased - unfreeze properties
+            await this.planEnforcement.unfreezeProperties(agencyId, newConfig.maxProperties);
+          }
+        }
+
+        // Check and enforce tenant limits
+        if (newConfig.maxTenants !== undefined && 
+            oldConfig.maxTenants !== newConfig.maxTenants) {
+          if (newConfig.maxTenants < oldConfig.maxTenants) {
+            // Limit reduced - freeze excess tenants
+            await this.planEnforcement.freezeExcessTenants(agencyId, newConfig.maxTenants);
+          } else {
+            // Limit increased - unfreeze tenants
+            await this.planEnforcement.unfreezeTenants(agencyId, newConfig.maxTenants);
+          }
+        }
+      }
+
+      // Process independent owners
+      for (const owner of independentOwners) {
+        const ownerId = owner.id.toString();
+        
+        // Check property limits
+        if (newConfig.maxProperties !== undefined && 
+            oldConfig.maxProperties !== newConfig.maxProperties) {
+          const propertyCount = await this.prisma.property.count({
+            where: {
+              ownerId: owner.id,
+              deleted: false,
+              isFrozen: false,
+            },
+          });
+
+          if (newConfig.maxProperties < oldConfig.maxProperties && propertyCount > newConfig.maxProperties) {
+            // Freeze excess properties
+            const properties = await this.prisma.property.findMany({
+              where: {
+                ownerId: owner.id,
+                deleted: false,
+                isFrozen: false,
+              },
+              orderBy: { createdAt: 'asc' },
+              skip: newConfig.maxProperties,
+            });
+
+            for (const property of properties) {
+              await this.prisma.property.update({
+                where: { id: property.id },
+                data: {
+                  isFrozen: true,
+                  frozenAt: new Date(),
+                  frozenReason: `Limite do plano reduzido para ${newConfig.maxProperties} imóveis`,
+                },
+              });
+            }
+          } else if (newConfig.maxProperties > oldConfig.maxProperties) {
+            // Unfreeze properties
+            const frozenProperties = await this.prisma.property.findMany({
+              where: {
+                ownerId: owner.id,
+                isFrozen: true,
+                deleted: false,
+              },
+              orderBy: { frozenAt: 'asc' },
+              take: newConfig.maxProperties - oldConfig.maxProperties,
+            });
+
+            for (const property of frozenProperties) {
+              await this.prisma.property.update({
+                where: { id: property.id },
+                data: {
+                  isFrozen: false,
+                  frozenAt: null,
+                  frozenReason: null,
+                },
+              });
+            }
+          }
+        }
+
+        // Check tenant limits
+        if (newConfig.maxTenants !== undefined && 
+            oldConfig.maxTenants !== newConfig.maxTenants) {
+          const tenantCount = await this.prisma.user.count({
+            where: {
+              ownerId: owner.id,
+              role: UserRole.INQUILINO,
+              status: 'ACTIVE',
+              isFrozen: false,
+            },
+          });
+
+          if (newConfig.maxTenants < oldConfig.maxTenants && tenantCount > newConfig.maxTenants) {
+            // Freeze excess tenants
+            const tenants = await this.prisma.user.findMany({
+              where: {
+                ownerId: owner.id,
+                role: UserRole.INQUILINO,
+                status: 'ACTIVE',
+                isFrozen: false,
+              },
+              orderBy: { createdAt: 'asc' },
+              skip: newConfig.maxTenants,
+            });
+
+            for (const tenant of tenants) {
+              await this.prisma.user.update({
+                where: { id: tenant.id },
+                data: {
+                  isFrozen: true,
+                  frozenAt: new Date(),
+                  frozenReason: `Limite do plano reduzido para ${newConfig.maxTenants} inquilinos`,
+                },
+              });
+            }
+          } else if (newConfig.maxTenants > oldConfig.maxTenants) {
+            // Unfreeze tenants
+            const frozenTenants = await this.prisma.user.findMany({
+              where: {
+                ownerId: owner.id,
+                role: UserRole.INQUILINO,
+                isFrozen: true,
+              },
+              orderBy: { frozenAt: 'asc' },
+              take: newConfig.maxTenants - oldConfig.maxTenants,
+            });
+
+            for (const tenant of frozenTenants) {
+              await this.prisma.user.update({
+                where: { id: tenant.id },
+                data: {
+                  isFrozen: false,
+                  frozenAt: null,
+                  frozenReason: null,
+                },
+              });
+            }
+          }
+        }
+      }
+
+      this.logger.log(`Plan limit changes enforced for plan ${planName}: ${agencies.length} agencies, ${independentOwners.length} independent owners`);
+    } catch (error) {
+      this.logger.error(`Error enforcing plan limit changes for plan ${planName}:`, error);
+      // Don't throw - we don't want to fail the plan update if enforcement fails
+      // The limits will still be updated and enforced on next operation
+    }
   }
 }

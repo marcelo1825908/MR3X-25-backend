@@ -10,6 +10,7 @@ import {
   Query,
   UseGuards,
   Req,
+  Res,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { AgreementsService } from './agreements.service';
@@ -29,7 +30,7 @@ import {
   DebtCalculationResponseDto,
   SettlementOptionsResponseDto,
 } from './dto/calculation.dto';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { AgreementPermissionGuard } from './guards/agreement-permission.guard';
 import { LoadedAgreement, AgreementUserContext } from './guards/agreement-permission.guard';
 import {
@@ -44,6 +45,7 @@ import {
 } from './decorators/agreement-permission.decorator';
 import { AgreementAction, SignatureType } from './constants/agreement-permissions.constants';
 import { AgreementPermissionService, UserContext } from './services/agreement-permission.service';
+import { AgreementPdfService } from './services/agreement-pdf.service';
 
 @ApiTags('Agreements')
 @Controller('agreements')
@@ -54,6 +56,7 @@ export class AgreementsController {
     private readonly agreementsService: AgreementsService,
     private readonly permissionService: AgreementPermissionService,
     private readonly calculationService: AgreementCalculationService,
+    private readonly agreementPdfService: AgreementPdfService,
   ) {}
 
   @Get()
@@ -558,5 +561,20 @@ export class AgreementsController {
   @ApiParam({ name: 'id', description: 'Agreement ID' })
   async remove(@Param('id') id: string) {
     return this.agreementsService.remove(id);
+  }
+
+  @Get(':id/pdf')
+  @ApiOperation({ summary: 'Generate agreement PDF with legal compliance clauses' })
+  @ApiParam({ name: 'id', description: 'Agreement ID' })
+  async generatePdf(@Param('id') id: string, @Res() res: Response) {
+    const pdfBuffer = await this.agreementPdfService.generatePdf(BigInt(id));
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="acordo-${id}.pdf"`,
+      'Content-Length': pdfBuffer.length.toString(),
+    });
+
+    res.end(pdfBuffer);
   }
 }

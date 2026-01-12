@@ -6,6 +6,7 @@ import * as QRCode from 'qrcode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ExtrajudicialNotificationHashService } from './extrajudicial-notification-hash.service';
+import { LegalValidationService } from './legal-validation.service';
 
 interface NotificationData {
   id: string;
@@ -45,6 +46,8 @@ interface NotificationData {
     interestAmount: number | null;
     correctionAmount: number | null;
     lawyerFees: number | null;
+    attorneyName: string | null;
+    attorneyOAB: string | null;
     totalAmount: number;
   };
   deadline: {
@@ -60,6 +63,7 @@ interface NotificationData {
     witness2?: { signature: string; signedAt: Date; name: string; document: string };
   };
   createdAt: Date;
+  hashFinal?: string;
 }
 
 @Injectable()
@@ -69,6 +73,7 @@ export class ExtrajudicialNotificationPdfService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly hashService: ExtrajudicialNotificationHashService,
+    private readonly legalValidation: LegalValidationService,
   ) {
     this.uploadsDir = path.join(process.cwd(), 'uploads', 'extrajudicial-notifications');
     this.ensureDirectoryExists(path.join(this.uploadsDir, 'provisional'));
@@ -165,6 +170,8 @@ export class ExtrajudicialNotificationPdfService {
         interestAmount: notification.interestAmount ? Number(notification.interestAmount) : null,
         correctionAmount: notification.correctionAmount ? Number(notification.correctionAmount) : null,
         lawyerFees: notification.lawyerFees ? Number(notification.lawyerFees) : null,
+        attorneyName: notification.attorneyName || null,
+        attorneyOAB: notification.attorneyOAB || null,
         totalAmount: Number(notification.totalAmount),
       },
       deadline: {
@@ -210,6 +217,7 @@ export class ExtrajudicialNotificationPdfService {
           : undefined,
       },
       createdAt: notification.createdAt,
+      hashFinal: notification.hashFinal || undefined,
     };
   }
 
@@ -238,7 +246,7 @@ export class ExtrajudicialNotificationPdfService {
       ACEITA: 'Aceita',
       REJEITADA: 'Rejeitada',
       PRAZO_EXPIRADO: 'Prazo Expirado',
-      ENCAMINHADA_JUDICIAL: 'Encaminhada ao Judicial',
+      ENCAMINHADA_JUDICIAL: 'Encaminhada para Medidas Judiciais',
       CANCELADA: 'Cancelada',
     };
     return statuses[status] || status;
@@ -281,7 +289,7 @@ export class ExtrajudicialNotificationPdfService {
   }
 
   private async renderHtmlTemplate(data: NotificationData, isProvisional: boolean): Promise<string> {
-    const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify/notification/${data.token}`;
+    const verificationUrl = this.legalValidation.getSafeVerificationUrl(data.token);
     const barcodeBase64 = await this.generateBarcodeBase64(data.token);
     const qrCodeBase64 = await this.generateQRCodeBase64(verificationUrl);
 
@@ -345,7 +353,7 @@ export class ExtrajudicialNotificationPdfService {
           <p style="margin: 0 0 4px 0;"><strong>Token:</strong> ${data.token}</p>
           <p style="margin: 0 0 4px 0;"><strong>Protocolo:</strong> ${data.protocolNumber}</p>
           <p style="margin: 0 0 4px 0;"><strong>Gerado em:</strong> ${this.formatDateTime(new Date())}</p>
-          <p style="margin: 0;"><strong>Verificacao:</strong> ${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify/notification/${data.token}</p>
+          <p style="margin: 0;"><strong>Verificacao:</strong> ${this.legalValidation.getSafeVerificationUrl(data.token)}</p>
         </div>
       `;
 
@@ -400,7 +408,9 @@ export class ExtrajudicialNotificationPdfService {
           <p style="margin: 0 0 2px 0;"><strong>Token:</strong> ${data.token}</p>
           <p style="margin: 0 0 2px 0;"><strong>Protocolo:</strong> ${data.protocolNumber}</p>
           <p style="margin: 0 0 2px 0;"><strong>Gerado em:</strong> ${this.formatDateTime(new Date())}</p>
-          <p style="margin: 0;"><strong>Verificacao:</strong> ${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify/notification/${data.token}</p>
+          <p style="margin: 0 0 2px 0;"><strong>Verificacao:</strong> ${this.legalValidation.getSafeVerificationUrl(data.token)}</p>
+          ${data.hashFinal ? `<p style="margin: 0;"><strong>Hash SHA-256:</strong> ${data.hashFinal}</p>` : ''}
+          <p style="margin-top: 4px; font-size: 5pt; color: #999;"><strong>MR3X é uma plataforma de tecnologia para gestão de aluguéis e não presta serviços jurídicos, advocatícios ou de intermediação judicial.</strong></p>
         </div>
       `;
 
@@ -423,7 +433,7 @@ export class ExtrajudicialNotificationPdfService {
       fs.writeFileSync(filePath, pdfBuffer);
 
       const hash = this.hashService.generateHash(pdfBuffer);
-      const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify/notification/${data.token}`;
+      const verificationUrl = this.legalValidation.getSafeVerificationUrl(data.token);
 
       await this.prisma.extrajudicialNotification.update({
         where: { id: notificationId },
@@ -914,7 +924,20 @@ export class ExtrajudicialNotificationPdfService {
 
       <div class="legal-text">
         <strong>Fundamentacao Legal:</strong><br>
-        ${data.legalBasis}
+        ${this.legalValidation.enhanceLegalBasis(data.legalBasis, data.type)}
+      </div>
+
+      <div class="legal-disclaimer" style="background: #fff3cd; border: 2px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px; font-size: 9pt;">
+        <p style="font-weight: bold; color: #856404; margin-bottom: 8px;">⚠️ AVISO LEGAL IMPORTANTE:</p>
+        <p style="color: #856404; text-align: justify; line-height: 1.6;">
+          Este documento não constitui decisão judicial e não substitui o ajuizamento formal de ação judicial. 
+          Trata-se de notificação extrajudicial com o objetivo de buscar solução amigável da pendência, nos termos 
+          do Código de Processo Civil (Lei 13.105/2015).
+        </p>
+        <p style="color: #856404; text-align: justify; line-height: 1.6; margin-top: 8px;">
+          <strong>MR3X é uma plataforma de tecnologia para gestão de aluguéis e não presta serviços jurídicos, 
+          advocatícios ou de intermediação judicial.</strong>
+        </p>
       </div>
     </div>
 
@@ -969,6 +992,17 @@ export class ExtrajudicialNotificationPdfService {
             <td>Honorarios Advocaticios</td>
             <td class="amount">${this.formatCurrency(data.financial.lawyerFees)}</td>
           </tr>
+          ${data.financial.attorneyName && data.financial.attorneyOAB
+            ? `
+          <tr style="background-color: #f9f9f9;">
+            <td colspan="2" style="padding: 8px 12px; font-size: 9pt;">
+              <strong>Advogado Responsavel:</strong> ${data.financial.attorneyName}<br>
+              <strong>OAB:</strong> ${data.financial.attorneyOAB}
+            </td>
+          </tr>
+          `
+            : ''
+          }
           `
               : ''
           }
@@ -993,14 +1027,22 @@ export class ExtrajudicialNotificationPdfService {
           <p class="value">${data.deadlineDateFormatted}</p>
         </div>
         <div class="detail-box">
-          <p class="label">Prazo</p>
-          <p class="value">${data.deadline.days} dias</p>
+          <p class="label">Prazo Legal</p>
+          <p class="value">${data.deadline.days} dias corridos</p>
         </div>
+        ${data.deadline.gracePeriodDays && data.deadline.gracePeriodDays > 0
+          ? `
         <div class="detail-box">
-          <p class="label">Carencia</p>
-          <p class="value">${data.deadline.gracePeriodDays ? data.deadline.gracePeriodDays + ' dias' : 'N/A'}</p>
+          <p class="label">Prazo Administrativo</p>
+          <p class="value">${data.deadline.gracePeriodDays} dias adicionais (a critério do credor)</p>
         </div>
+        `
+          : ''
+        }
       </div>
+      <p style="margin-top: 10px; font-size: 10pt; text-align: justify; line-height: 1.6;">
+        ${this.legalValidation.formatDeadlineText(data.deadline.days, data.deadline.gracePeriodDays)}
+      </p>
     </div>
 
     ${
@@ -1036,8 +1078,9 @@ export class ExtrajudicialNotificationPdfService {
                 ? `
             <p class="signature-meta">
               Assinado em: ${this.formatDateTime(data.signatures.creditor.signedAt)}<br>
-              IP: ${data.signatures.creditor.ip}
-              ${data.signatures.creditor.lat ? `<br>Geo: ${data.signatures.creditor.lat.toFixed(6)}, ${data.signatures.creditor.lng?.toFixed(6)}` : ''}
+              IP: ${data.signatures.creditor.ip}<br>
+              ${data.signatures.creditor.lat ? `Geo: ${data.signatures.creditor.lat.toFixed(6)}, ${data.signatures.creditor.lng?.toFixed(6)}<br>` : ''}
+              ${data.hashFinal ? `Hash: ${data.hashFinal.substring(0, 16)}...` : ''}
             </p>
             `
                 : ''
@@ -1063,8 +1106,9 @@ export class ExtrajudicialNotificationPdfService {
                 ? `
             <p class="signature-meta">
               Assinado em: ${this.formatDateTime(data.signatures.debtor.signedAt)}<br>
-              IP: ${data.signatures.debtor.ip}
-              ${data.signatures.debtor.lat ? `<br>Geo: ${data.signatures.debtor.lat.toFixed(6)}, ${data.signatures.debtor.lng?.toFixed(6)}` : ''}
+              IP: ${data.signatures.debtor.ip}<br>
+              ${data.signatures.debtor.lat ? `Geo: ${data.signatures.debtor.lat.toFixed(6)}, ${data.signatures.debtor.lng?.toFixed(6)}<br>` : ''}
+              ${data.hashFinal ? `Hash: ${data.hashFinal.substring(0, 16)}...` : ''}
             </p>
             `
                 : ''

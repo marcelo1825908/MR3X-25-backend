@@ -15,14 +15,86 @@ export class PropertiesService {
     private tokenGenerator: TokenGeneratorService,
   ) {}
 
-  async findAll(params: { skip?: number; take?: number; agencyId?: string; status?: string; ownerId?: string; createdById?: string; search?: string }) {
-    const { skip = 0, take = 10, agencyId, status, ownerId, createdById, search } = params;
+  /**
+   * Determines the correct property status based on tenant, broker, and contract status.
+   * Property can be DISPONIVEL when both brokerId and tenantId are set (regardless of nextDueDate).
+   * Property cannot be DISPONIVEL if a tenant is linked and a contract exists (even pending signatures).
+   * 
+   * @param propertyId - The property ID to check
+   * @param tenantId - The tenant ID (can be null)
+   * @param brokerId - The broker ID (can be null)
+   * @param nextDueDate - The next due date (can be null, not required for DISPONIVEL status)
+   * @returns The appropriate property status
+   */
+  async determinePropertyStatus(propertyId: bigint, tenantId: bigint | null, brokerId: bigint | null = null, nextDueDate: Date | null = null): Promise<string> {
+    // Check if required fields are set for DISPONIVEL status
+    // Property can be DISPONIVEL when both brokerId and tenantId are set
+    const hasBroker = !!brokerId;
+    const hasTenant = !!tenantId;
+    
+    // If broker or tenant is missing, property cannot be DISPONIVEL
+    if (!hasBroker || !hasTenant) {
+      // Return INCOMPLETO if missing required fields
+      return 'INCOMPLETO';
+    }
+    
+    // Both broker and tenant are set
+    // Now check if tenant has contracts to determine final status
+    // If no contract exists, property can be DISPONIVEL (all requirements met)
+    
+    // Check if there's an active contract (not revoked or terminated)
+    const activeContract = await this.prisma.contract.findFirst({
+      where: {
+        propertyId: propertyId,
+        tenantId: tenantId,
+        deleted: false,
+        status: {
+          notIn: ['REVOGADO', 'ENCERRADO', 'TERMINATED', 'REVOKED'],
+        },
+      },
+      select: {
+        status: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    // If there's a contract (even pending), property cannot be DISPONIVEL
+    if (activeContract) {
+      const contractStatus = (activeContract.status || '').toUpperCase();
+      
+      // Contract is active/signed - property is occupied
+      if (contractStatus === 'ATIVO' || contractStatus === 'ACTIVE' || 
+          contractStatus === 'ASSINADO' || contractStatus === 'SIGNED') {
+        return 'ALUGADO';
+      }
+      
+      // Contract is pending signatures - property is in negotiation
+      if (contractStatus === 'PENDENTE' || contractStatus === 'PENDING' ||
+          contractStatus === 'AGUARDANDO_ASSINATURAS' || contractStatus === 'AGUARDANDO_ASSINATURA' ||
+          contractStatus === 'AWAITING_SIGNATURE' || contractStatus === 'AWAITING_SIGNATURES') {
+        return 'EM_NEGOCIACAO';
+      }
+      
+      // For any other contract status (that's not revoked/terminated), property is occupied
+      return 'ALUGADO';
+    }
+
+    // Both broker and tenant are set and no contract exists
+    // Property can be DISPONIVEL (ready/available)
+    return 'DISPONIVEL';
+  }
+
+  async findAll(params: { skip?: number; take?: number; agencyId?: string; status?: string; ownerId?: string; createdById?: string; brokerId?: string; search?: string }) {
+    const { skip = 0, take = 10, agencyId, status, ownerId, createdById, brokerId, search } = params;
 
     const where: any = { deleted: false };
     if (agencyId) where.agencyId = BigInt(agencyId);
     if (status) where.status = status;
     if (ownerId) where.ownerId = BigInt(ownerId);
     if (createdById) where.createdBy = BigInt(createdById);
+    if (brokerId) where.brokerId = BigInt(brokerId); // Realtors can only see properties assigned to them
 
     if (search && search.trim()) {
       const searchTerm = search.trim();
@@ -135,8 +207,48 @@ export class PropertiesService {
       this.prisma.property.count({ where }),
     ]);
 
+    // Recalculate and fix property status
+    // Property can only be DISPONIVEL when ALL of these are set: brokerId, tenantId, and nextDueDate
+    const statusUpdates: Promise<void>[] = [];
+    const fixedProperties = await Promise.all(
+      properties.map(async (p) => {
+        // Check if status needs to be recalculated
+        // Always recalculate if showing as available, missing required fields, or if status is EM_NEGOCIACAO (might need update if contract is ASSINADO)
+        const needsRecalculation = 
+          p.status === 'DISPONIVEL' || // Always recalculate if showing as available
+          p.status === 'EM_NEGOCIACAO' || // Recalculate if in negotiation (contract might be signed now)
+          (!p.brokerId || !p.tenantId || !p.nextDueDate); // Or if missing required fields
+        
+        if (needsRecalculation) {
+          const correctStatus = await this.determinePropertyStatus(
+            p.id, 
+            p.tenantId, 
+            p.brokerId, 
+            p.nextDueDate
+          );
+          if (correctStatus !== p.status) {
+            // Queue update in database (don't await to avoid blocking response)
+            statusUpdates.push(
+              this.prisma.property.update({
+                where: { id: p.id },
+                data: { status: correctStatus },
+              }).then(() => {}).catch(err => console.error(`Error updating property ${p.id} status:`, err))
+            );
+            // Return corrected status immediately
+            return { ...p, status: correctStatus };
+          }
+        }
+        return p;
+      })
+    );
+
+    // Execute all status updates in parallel (fire and forget)
+    if (statusUpdates.length > 0) {
+      Promise.all(statusUpdates).catch(err => console.error('Error updating property statuses:', err));
+    }
+
     return {
-      data: properties.map(p => this.serializeProperty(p)),
+      data: fixedProperties.map(p => this.serializeProperty(p)),
       total,
       page: Math.floor(skip / take) + 1,
       limit: take,
@@ -225,6 +337,29 @@ export class PropertiesService {
       throw new NotFoundException('Property not found');
     }
 
+    // Recalculate and fix property status
+    // Property can only be DISPONIVEL when ALL of these are set: brokerId, tenantId, and nextDueDate
+    const needsRecalculation = 
+      property.status === 'DISPONIVEL' || // Always recalculate if showing as available
+      (!property.brokerId || !property.tenantId || !property.nextDueDate); // Or if missing required fields
+    
+    if (needsRecalculation) {
+      const correctStatus = await this.determinePropertyStatus(
+        property.id, 
+        property.tenantId, 
+        property.brokerId, 
+        property.nextDueDate
+      );
+      if (correctStatus !== property.status) {
+        // Update in database
+        await this.prisma.property.update({
+          where: { id: property.id },
+          data: { status: correctStatus },
+        });
+        property.status = correctStatus;
+      }
+    }
+
     return this.serializeProperty(property);
   }
 
@@ -271,6 +406,18 @@ export class PropertiesService {
         condominiumName: data.condominiumName || null,
         condominiumFee: data.condominiumFee || null,
         iptuValue: data.iptuValue || null,
+        // Property Classification
+        propertyType: data.propertyType || null,
+        useType: data.useType || null,
+        // Rural Property Fields
+        totalAreaHectares: data.totalAreaHectares || null,
+        productiveArea: data.productiveArea || null,
+        propertyRegistry: data.propertyRegistry || null,
+        ccirNumber: data.ccirNumber || null,
+        carNumber: data.carNumber || null,
+        itrValue: data.itrValue || null,
+        georeferencing: data.georeferencing || null,
+        intendedUse: data.intendedUse || null,
       },
     });
 
@@ -340,27 +487,70 @@ export class PropertiesService {
       },
     });
 
-    // Calculate status for INDEPENDENT_OWNER: if missing tenant or nextDueDate, set to INCOMPLETO
+    // Calculate status for INDEPENDENT_OWNER: only mark as INCOMPLETO if truly missing required data
     if (updated.owner?.role === 'INDEPENDENT_OWNER') {
-      const missingTenant = !updated.tenantId;
-      const missingNextDue = !updated.nextDueDate;
+      // Required fields for a complete property:
+      // - address (minimum required)
+      // - city (minimum required)
+      // - monthlyRent or property value (for rental properties)
+      const hasAddress = updated.address && updated.address.trim().length > 0;
+      const hasCity = updated.city && updated.city.trim().length > 0;
+      const hasRent = updated.monthlyRent && Number(updated.monthlyRent) > 0;
       
-      if (missingTenant || missingNextDue) {
+      // Only mark as INCOMPLETO if missing essential data
+      const isIncomplete = !hasAddress || !hasCity || !hasRent;
+      
+      if (isIncomplete && updated.status !== 'INCOMPLETO') {
         // Only update status if it's not already INCOMPLETO to avoid unnecessary updates
-        if (updated.status !== 'INCOMPLETO') {
-          await this.prisma.property.update({
-            where: { id: BigInt(id) },
-            data: { status: 'INCOMPLETO' },
-          });
-          updated.status = 'INCOMPLETO';
-        }
-      } else if (updated.status === 'INCOMPLETO') {
-        // If status is INCOMPLETO but now has both tenant and nextDueDate, change to DISPONIVEL
         await this.prisma.property.update({
           where: { id: BigInt(id) },
-          data: { status: 'DISPONIVEL' },
+          data: { status: 'INCOMPLETO' },
         });
-        updated.status = 'DISPONIVEL';
+        updated.status = 'INCOMPLETO';
+      } else if (!isIncomplete && updated.status === 'INCOMPLETO') {
+        // If status is INCOMPLETO but now has all required data, determine correct status
+        // based on broker, tenant, nextDueDate and contract status
+        const newStatus = await this.determinePropertyStatus(
+          BigInt(id), 
+          updated.tenantId, 
+          updated.brokerId, 
+          updated.nextDueDate
+        );
+        await this.prisma.property.update({
+          where: { id: BigInt(id) },
+          data: { status: newStatus },
+        });
+        updated.status = newStatus;
+      } else if (!isIncomplete) {
+        // Check if status needs to be updated based on broker, tenant, nextDueDate and contracts
+        const correctStatus = await this.determinePropertyStatus(
+          BigInt(id), 
+          updated.tenantId, 
+          updated.brokerId, 
+          updated.nextDueDate
+        );
+        if (correctStatus !== updated.status) {
+          await this.prisma.property.update({
+            where: { id: BigInt(id) },
+            data: { status: correctStatus },
+          });
+          updated.status = correctStatus;
+        }
+      }
+    } else {
+      // For all property owners, check if status needs to be updated
+      const correctStatus = await this.determinePropertyStatus(
+        BigInt(id), 
+        updated.tenantId, 
+        updated.brokerId, 
+        updated.nextDueDate
+      );
+      if (correctStatus !== updated.status) {
+        await this.prisma.property.update({
+          where: { id: BigInt(id) },
+          data: { status: correctStatus },
+        });
+        updated.status = correctStatus;
       }
     }
 
@@ -637,12 +827,49 @@ export class PropertiesService {
           updated.status = 'INCOMPLETO';
         }
       } else if (updated.status === 'INCOMPLETO') {
-        // If status is INCOMPLETO but now has both tenant and nextDueDate, change to DISPONIVEL
+        // If status is INCOMPLETO but now has all required fields, determine correct status
+        // based on broker, tenant, nextDueDate and contract status
+        const newStatus = await this.determinePropertyStatus(
+          BigInt(propertyId), 
+          updated.tenantId, 
+          updated.brokerId, 
+          updated.nextDueDate
+        );
         await this.prisma.property.update({
           where: { id: BigInt(propertyId) },
-          data: { status: 'DISPONIVEL' },
+          data: { status: newStatus },
         });
-        updated.status = 'DISPONIVEL';
+        updated.status = newStatus;
+      } else {
+        // Check if status needs to be updated based on broker, tenant, nextDueDate and contracts
+        const correctStatus = await this.determinePropertyStatus(
+          BigInt(propertyId), 
+          updated.tenantId, 
+          updated.brokerId, 
+          updated.nextDueDate
+        );
+        if (correctStatus !== updated.status) {
+          await this.prisma.property.update({
+            where: { id: BigInt(propertyId) },
+            data: { status: correctStatus },
+          });
+          updated.status = correctStatus;
+        }
+      }
+    } else {
+      // For all property owners, check if status needs to be updated
+      const correctStatus = await this.determinePropertyStatus(
+        BigInt(propertyId), 
+        updated.tenantId, 
+        updated.brokerId, 
+        updated.nextDueDate
+      );
+      if (correctStatus !== updated.status) {
+        await this.prisma.property.update({
+          where: { id: BigInt(propertyId) },
+          data: { status: correctStatus },
+        });
+        updated.status = correctStatus;
       }
     }
 

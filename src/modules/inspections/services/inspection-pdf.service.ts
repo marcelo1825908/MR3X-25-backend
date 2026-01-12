@@ -35,6 +35,10 @@ interface InspectionData {
   inspector: {
     name: string;
     email: string;
+    document?: string;
+    creci?: string;
+    crea?: string;
+    role?: string;
   };
   agency?: {
     name: string;
@@ -129,7 +133,16 @@ export class InspectionPdfService {
             tenant: true,
           },
         },
-        inspector: true,
+        inspector: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            document: true,
+            role: true,
+            creci: true,
+          },
+        },
         items: true,
       },
     });
@@ -177,6 +190,10 @@ export class InspectionPdfService {
       inspector: {
         name: inspection.inspector.name || 'N/A',
         email: inspection.inspector.email,
+        document: inspection.inspector.document || undefined,
+        creci: inspection.inspectorCreci || inspection.inspector.creci || undefined, // CRECI from inspection record or user profile
+        crea: undefined, // CREA not stored, would need to be added to schema if needed
+        role: inspection.inspector.role || undefined,
       },
       agency: agency
         ? {
@@ -235,7 +252,7 @@ export class InspectionPdfService {
     };
   }
 
-  private async renderHtmlTemplate(data: InspectionData, isProvisional: boolean): Promise<string> {
+  private async renderHtmlTemplate(data: InspectionData & { hashFinal?: string }, isProvisional: boolean): Promise<string> {
     const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify/inspection/${data.token}`;
     const barcodeBase64 = await this.generateBarcodeBase64(data.token);
     const qrCodeBase64 = await this.generateQRCodeBase64(verificationUrl);
@@ -349,7 +366,12 @@ export class InspectionPdfService {
 
   async generateFinalPdf(inspectionId: bigint): Promise<Buffer> {
     const data = await this.getInspectionData(inspectionId);
-    const html = await this.renderHtmlTemplate(data, false);
+    // Get hash before generating PDF to include in template
+    const inspection = await this.prisma.inspection.findUnique({
+      where: { id: inspectionId },
+      select: { hashFinal: true },
+    });
+    const html = await this.renderHtmlTemplate({ ...data, hashFinal: inspection?.hashFinal || undefined }, false);
 
     const browser = await puppeteer.launch({
       headless: true,
@@ -800,61 +822,59 @@ export class InspectionPdfService {
       <span class="status-badge">${data.statusLabel}</span>
     </div>
 
-    <div class="info-grid">
-      <div class="info-box">
-        <h3>IMOVEL</h3>
-        <p><span class="label">Endereco:</span> ${data.property.address}</p>
+    <div class="section" style="background: #f9fafb; border: 2px solid #1e40af; padding: 15px; margin-bottom: 20px; border-radius: 6px;">
+      <h2 class="section-title" style="color: #1e40af; margin-bottom: 15px;">IDENTIFICAÇÃO OBRIGATÓRIA</h2>
+      <div class="info-grid">
+        <div class="info-box" style="background: white;">
+          <h3>VISTORIADOR</h3>
+          <p><span class="label">Nome:</span> ${data.inspector.name}</p>
+          ${data.inspector.document ? `<p><span class="label">CPF:</span> ${data.inspector.document}</p>` : ''}
+          ${data.inspector.creci ? `<p><span class="label">CRECI:</span> ${data.inspector.creci}</p>` : ''}
+          ${data.inspector.crea ? `<p><span class="label">CREA:</span> ${data.inspector.crea}</p>` : ''}
+          <p><span class="label">E-mail:</span> ${data.inspector.email}</p>
+        </div>
+        ${data.owner ? `
+        <div class="info-box" style="background: white;">
+          <h3>PROPRIETÁRIO</h3>
+          <p><span class="label">Nome:</span> ${data.owner.name}</p>
+          <p><span class="label">CPF/CNPJ:</span> ${data.owner.document}</p>
+          <p><span class="label">E-mail:</span> ${data.owner.email}</p>
+        </div>
+        ` : ''}
+        ${data.tenant ? `
+        <div class="info-box" style="background: white;">
+          <h3>INQUILINO</h3>
+          <p><span class="label">Nome:</span> ${data.tenant.name}</p>
+          <p><span class="label">CPF/CNPJ:</span> ${data.tenant.document}</p>
+          <p><span class="label">E-mail:</span> ${data.tenant.email}</p>
+        </div>
+        ` : ''}
+        ${data.agency ? `
+        <div class="info-box" style="background: white;">
+          <h3>IMOBILIÁRIA</h3>
+          <p><span class="label">Razão Social:</span> ${data.agency.name}</p>
+          <p><span class="label">CNPJ:</span> ${data.agency.cnpj}</p>
+        </div>
+        ` : ''}
+      </div>
+      <div class="info-box" style="background: white; margin-top: 10px;">
+        <h3>IMÓVEL</h3>
+        <p><span class="label">Endereço:</span> ${data.property.address}</p>
         <p><span class="label">Bairro:</span> ${data.property.neighborhood}</p>
         <p><span class="label">Cidade:</span> ${data.property.city}</p>
         <p><span class="label">CEP:</span> ${data.property.cep}</p>
       </div>
+    </div>
+
+    <div class="info-grid">
       <div class="info-box">
         <h3>INFORMACOES DA VISTORIA</h3>
         <p><span class="label">Data:</span> ${data.dateFormatted}</p>
         <p><span class="label">Agendada:</span> ${data.scheduledDateFormatted}</p>
-        <p><span class="label">Vistoriador:</span> ${data.inspector.name}</p>
         ${data.location ? `<p><span class="label">Local:</span> ${data.location}</p>` : ''}
       </div>
     </div>
 
-    <div class="info-grid">
-      ${
-        data.owner
-          ? `
-      <div class="info-box">
-        <h3>PROPRIETARIO</h3>
-        <p><span class="label">Nome:</span> ${data.owner.name}</p>
-        <p><span class="label">CPF/CNPJ:</span> ${data.owner.document}</p>
-        <p><span class="label">E-mail:</span> ${data.owner.email}</p>
-      </div>
-      `
-          : ''
-      }
-      ${
-        data.tenant
-          ? `
-      <div class="info-box">
-        <h3>INQUILINO</h3>
-        <p><span class="label">Nome:</span> ${data.tenant.name}</p>
-        <p><span class="label">CPF/CNPJ:</span> ${data.tenant.document}</p>
-        <p><span class="label">E-mail:</span> ${data.tenant.email}</p>
-      </div>
-      `
-          : ''
-      }
-    </div>
-
-    ${
-      data.agency
-        ? `
-    <div class="info-box" style="margin-bottom: 15px;">
-      <h3>IMOBILIARIA</h3>
-      <p><span class="label">Razao Social:</span> ${data.agency.name}</p>
-      <p><span class="label">CNPJ:</span> ${data.agency.cnpj}</p>
-    </div>
-    `
-        : ''
-    }
 
     <div class="section">
       <h2 class="section-title">ITENS VISTORIADOS</h2>
@@ -871,6 +891,14 @@ export class InspectionPdfService {
     `
         : ''
     }
+
+    <div class="section">
+      <div class="legal-disclaimer" style="background: #f5f5f5; border-left: 4px solid #666; padding: 12px 15px; font-style: italic; margin: 15px 0; font-size: 9pt;">
+        <p><strong>DECLARAÇÃO DE ACEITAÇÃO:</strong></p>
+        <p>As partes reconhecem este relatório de vistoria como representação fiel do estado de conservação do imóvel no momento da inspeção.</p>
+        <p style="margin-top: 8px;"><strong>MR3X é uma plataforma de tecnologia para gestão de aluguéis e não presta serviços jurídicos, advocatícios ou de intermediação judicial.</strong></p>
+      </div>
+    </div>
 
     <div class="signatures">
       <h2 class="section-title">ASSINATURAS</h2>
@@ -894,8 +922,9 @@ export class InspectionPdfService {
                 ? `
             <p class="signature-meta">
               Assinado em: ${new Date(data.signatures.inspector.signedAt).toLocaleString('pt-BR')}<br>
-              IP: ${data.signatures.inspector.ip}
-              ${data.signatures.inspector.lat ? `<br>Geo: ${data.signatures.inspector.lat.toFixed(6)}, ${data.signatures.inspector.lng?.toFixed(6)}` : ''}
+              IP: ${data.signatures.inspector.ip}<br>
+              ${data.signatures.inspector.lat ? `Geo: ${data.signatures.inspector.lat.toFixed(6)}, ${data.signatures.inspector.lng?.toFixed(6)}<br>` : ''}
+              ${data.hashFinal ? `Hash: ${data.hashFinal.substring(0, 16)}...` : ''}
             </p>
             `
                 : ''
@@ -924,8 +953,9 @@ export class InspectionPdfService {
                 ? `
             <p class="signature-meta">
               Assinado em: ${new Date(data.signatures.owner.signedAt).toLocaleString('pt-BR')}<br>
-              IP: ${data.signatures.owner.ip}
-              ${data.signatures.owner.lat ? `<br>Geo: ${data.signatures.owner.lat.toFixed(6)}, ${data.signatures.owner.lng?.toFixed(6)}` : ''}
+              IP: ${data.signatures.owner.ip}<br>
+              ${data.signatures.owner.lat ? `Geo: ${data.signatures.owner.lat.toFixed(6)}, ${data.signatures.owner.lng?.toFixed(6)}<br>` : ''}
+              ${data.hashFinal ? `Hash: ${data.hashFinal.substring(0, 16)}...` : ''}
             </p>
             `
                 : ''
@@ -957,8 +987,9 @@ export class InspectionPdfService {
                 ? `
             <p class="signature-meta">
               Assinado em: ${new Date(data.signatures.tenant.signedAt).toLocaleString('pt-BR')}<br>
-              IP: ${data.signatures.tenant.ip}
-              ${data.signatures.tenant.lat ? `<br>Geo: ${data.signatures.tenant.lat.toFixed(6)}, ${data.signatures.tenant.lng?.toFixed(6)}` : ''}
+              IP: ${data.signatures.tenant.ip}<br>
+              ${data.signatures.tenant.lat ? `Geo: ${data.signatures.tenant.lat.toFixed(6)}, ${data.signatures.tenant.lng?.toFixed(6)}<br>` : ''}
+              ${data.hashFinal ? `Hash: ${data.hashFinal.substring(0, 16)}...` : ''}
             </p>
             `
                 : ''
@@ -990,8 +1021,9 @@ export class InspectionPdfService {
                 ? `
             <p class="signature-meta">
               Assinado em: ${new Date(data.signatures.agency.signedAt).toLocaleString('pt-BR')}<br>
-              IP: ${data.signatures.agency.ip}
-              ${data.signatures.agency.lat ? `<br>Geo: ${data.signatures.agency.lat.toFixed(6)}, ${data.signatures.agency.lng?.toFixed(6)}` : ''}
+              IP: ${data.signatures.agency.ip}<br>
+              ${data.signatures.agency.lat ? `Geo: ${data.signatures.agency.lat.toFixed(6)}, ${data.signatures.agency.lng?.toFixed(6)}<br>` : ''}
+              ${data.hashFinal ? `Hash: ${data.hashFinal.substring(0, 16)}...` : ''}
             </p>
             `
                 : ''
@@ -1008,7 +1040,8 @@ export class InspectionPdfService {
       <p><strong>Token:</strong> ${data.token}</p>
       <p><strong>Gerado em:</strong> ${data.generatedAt}</p>
       <p><strong>Verificacao:</strong> ${data.verificationUrl}</p>
-      ${!data.isProvisional ? `<p class="hash"><strong>Hash SHA-256:</strong> Calculado apos geracao final</p>` : ''}
+      ${!data.isProvisional && data.hashFinal ? `<p class="hash"><strong>Hash SHA-256:</strong> ${data.hashFinal}</p>` : !data.isProvisional ? `<p class="hash"><strong>Hash SHA-256:</strong> Calculado apos geracao final</p>` : ''}
+      <p style="margin-top: 4px; font-size: 5pt; color: #999;"><strong>MR3X é uma plataforma de tecnologia para gestão de aluguéis e não presta serviços jurídicos, advocatícios ou de intermediação judicial.</strong></p>
     </div>
   </div>
 </body>

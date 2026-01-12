@@ -17,50 +17,65 @@ export class DashboardService {
 
     const totalProperties = properties.length;
     
-    // Calculate active contracts - consider multiple relevant statuses (Portuguese and English)
-    const activeContractsList = contracts.filter((c: any) => {
+    // Helper function to check if contract is fully signed
+    const isFullySigned = (contract: any): boolean => {
+      const hasTenant = !!contract.tenantSignature && !!contract.tenantSignedAt;
+      const hasOwner = !!contract.ownerSignature && !!contract.ownerSignedAt;
+      const hasAgency = !contract.agencyId || (!!contract.agencySignature && !!contract.agencySignedAt);
+      return hasTenant && hasOwner && hasAgency;
+    };
+
+    // Separate contracts by status
+    const fullySignedContracts = contracts.filter((c: any) => {
       const status = (c.status || '').toUpperCase();
-      return status === 'ATIVO' ||
-             status === 'ACTIVE' ||
-             status === 'ASSINADO' ||
-             status === 'SIGNED' ||
-             status === 'AGUARDANDO_ASSINATURAS' ||
-             status === 'AGUARDANDO_ASSINATURA' ||
-             status === 'AWAITING_SIGNATURE' ||
-             status === 'AWAITING_SIGNATURES' ||
-             status === 'PENDENTE' ||
-             status === 'PENDING';
+      const isActiveStatus = status === 'ATIVO' || status === 'ACTIVE' || status === 'ASSINADO' || status === 'SIGNED';
+      return isActiveStatus && isFullySigned(c);
     });
-    const activeContractsCount = activeContractsList.length;
+
+    const inNegotiationContracts = contracts.filter((c: any) => {
+      const status = (c.status || '').toUpperCase();
+      const isPendingStatus = status === 'AGUARDANDO_ASSINATURAS' ||
+                             status === 'AGUARDANDO_ASSINATURA' ||
+                             status === 'AWAITING_SIGNATURE' ||
+                             status === 'AWAITING_SIGNATURES' ||
+                             status === 'PENDENTE' ||
+                             status === 'PENDING';
+      const isActiveButNotSigned = (status === 'ATIVO' || status === 'ACTIVE' || status === 'ASSINADO' || status === 'SIGNED') && !isFullySigned(c);
+      return isPendingStatus || isActiveButNotSigned;
+    });
+
+    const activeContractsCount = fullySignedContracts.length;
     
-    // Calculate occupied properties based on active contracts (more accurate)
-    const propertiesWithActiveContracts = new Set(
-      activeContractsList
+    // Calculate occupied properties - ONLY fully signed contracts
+    const propertiesWithFullySignedContracts = new Set(
+      fullySignedContracts
         .map((c: any) => c.property?.id || c.propertyId)
         .filter((id: any) => id !== null && id !== undefined)
     );
-    const occupiedFromContracts = propertiesWithActiveContracts.size;
+    const occupiedFromContracts = propertiesWithFullySignedContracts.size;
     
-    // Also consider properties marked as ALUGADO or RENTED
-    const propertiesMarkedOccupied = properties.filter((p: any) =>
-      p.status === 'ALUGADO' || p.status === 'RENTED'
-    ).length;
+    // Properties in negotiation (contract exists but not fully signed)
+    const propertiesInNegotiation = new Set(
+      inNegotiationContracts
+        .map((c: any) => c.property?.id || c.propertyId)
+        .filter((id: any) => id !== null && id !== undefined)
+    );
+    const inNegotiationCount = propertiesInNegotiation.size;
 
-    // Use the higher value or properties marked as occupied if no contracts
-    const occupiedProperties = Math.max(occupiedFromContracts, propertiesMarkedOccupied);
+    // Available properties = total - occupied - in negotiation
+    const availableProperties = totalProperties - occupiedFromContracts - inNegotiationCount;
+    
+    // Occupied properties = only fully signed contracts
+    const occupiedProperties = occupiedFromContracts;
 
-    // Calculate unique tenants from active contracts (fallback)
+    // Calculate unique tenants from fully signed contracts only
     const uniqueTenants = new Set(
-      activeContractsList
+      fullySignedContracts
         .map((c: any) => c.tenantUser?.id || c.tenantId)
         .filter((id: any) => id !== null && id !== undefined)
     );
     // Use override if provided (for direct tenant count), otherwise use contract-based count
     const tenantCount = tenantCountOverride !== undefined ? tenantCountOverride : uniqueTenants.size;
-
-    const availableProperties = properties.filter((p: any) =>
-      p.status === 'DISPONIVEL' || p.status === 'VACANT'
-    ).length;
     const maintenanceProperties = properties.filter((p: any) =>
       p.status === 'MANUTENCAO' || p.status === 'MAINTENANCE'
     ).length;
@@ -80,8 +95,10 @@ export class DashboardService {
       totalProperties,
       occupiedProperties,
       availableProperties,
+      inNegotiationProperties: inNegotiationCount,
       maintenanceProperties,
       activeContracts: activeContractsCount,
+      inNegotiationContracts: inNegotiationContracts.length,
       tenantCount,
       monthlyRevenue,
       pendingPayments: pendingContracts.length,
@@ -91,6 +108,10 @@ export class DashboardService {
       overdueUnits,
       onTimeUnits,
       pendingUnits,
+      // Occupancy rate calculation: only fully signed contracts
+      occupancyRate: totalProperties > 0 
+        ? Math.round((occupiedProperties / totalProperties) * 100) 
+        : 0,
     };
 
     const mappedPending = pendingContracts.map((contract: any) => ({
@@ -161,6 +182,13 @@ export class DashboardService {
 
       const totalAgencies = await this.prisma.agency.count({
         where: { status: 'ACTIVE' },
+      }).catch(() => 0);
+
+      const totalIndependentOwners = await this.prisma.user.count({
+        where: { 
+          status: 'ACTIVE',
+          role: 'INDEPENDENT_OWNER',
+        },
       }).catch(() => 0);
 
       const totalUsers = await this.prisma.user.count({
@@ -318,6 +346,7 @@ export class DashboardService {
       return {
         overview: {
           totalAgencies,
+          totalIndependentOwners,
           totalUsers,
           totalProperties,
           occupiedProperties,
@@ -415,6 +444,18 @@ export class DashboardService {
   }
 
   async getAdminDashboard(userId: string) {
+    try {
+      // Admin should see CEO-like global data, not just their own created data
+      // Use the same logic as CEO dashboard but with Admin permissions
+      return this.getCEODashboard();
+    } catch (error: any) {
+      console.error('Error in getAdminDashboard:', error);
+      throw error;
+    }
+  }
+
+  // Legacy method - keeping for backward compatibility but redirecting to CEO dashboard
+  async getAdminDashboardLegacy(userId: string) {
     try {
       const now = new Date();
       const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -637,7 +678,57 @@ export class DashboardService {
       return contract.lastPaymentDate < thirtyDaysAgo;
     });
 
-    return this.buildDashboardResponse(properties, contracts, paymentsThisMonth, pendingContracts, recentPayments);
+    // Get pending and overdue invoices for accurate pending amount calculation
+    const pendingInvoices = await this.prisma.invoice.findMany({
+      where: {
+        status: { in: ['PENDING', 'OVERDUE'] },
+        OR: [
+          { ownerId: creatorId },
+          { createdBy: creatorId },
+          { 
+            contract: {
+              property: {
+                createdBy: creatorId,
+              },
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+        contractId: true,
+        updatedValue: true,
+        originalValue: true,
+        fine: true,
+        interest: true,
+        dueDate: true,
+        status: true,
+        contract: {
+          select: {
+            id: true,
+            tenantId: true,
+            propertyId: true,
+          },
+        },
+      },
+    });
+
+    // Calculate accurate pending amount from invoices
+    const pendingAmount = pendingInvoices.reduce((sum: number, invoice: any) => {
+      return sum + Number(invoice.updatedValue || invoice.originalValue || 0);
+    }, 0);
+
+    const dashboardResponse = this.buildDashboardResponse(properties, contracts, paymentsThisMonth, pendingContracts, recentPayments);
+    
+    // Override pending amount with accurate calculation from invoices
+    return {
+      ...dashboardResponse,
+      overview: {
+        ...dashboardResponse.overview,
+        pendingAmount, // Accurate pending amount from invoices
+        overdueValue: pendingAmount, // Use same value for consistency
+      },
+    };
   }
 
   async getOwnerDashboard(userId: string) {
@@ -744,9 +835,13 @@ export class DashboardService {
   }
 
   async getTenantDashboard(userId: string) {
+    const tenantId = BigInt(userId);
+    const now = new Date();
+    
+    // Get property linked to tenant
     const property = await this.prisma.property.findFirst({
       where: {
-        tenantId: BigInt(userId),
+        tenantId,
         deleted: false,
       },
       include: {
@@ -761,31 +856,100 @@ export class DashboardService {
       },
     });
 
+    // Get active contract
     const contract = await this.prisma.contract.findFirst({
       where: {
-        tenantId: BigInt(userId),
-        status: 'ATIVO',
+        tenantId,
+        status: { in: ['ATIVO', 'ACTIVE', 'ASSINADO', 'SIGNED'] },
         deleted: false,
+      },
+      include: {
+        property: {
+          select: {
+            id: true,
+            name: true,
+            address: true,
+          },
+        },
       },
     });
 
-    const payments = await this.prisma.payment.findMany({
+    // Get all payments (not just last 12)
+    const allPayments = await this.prisma.payment.findMany({
       where: {
-        userId: BigInt(userId),
+        userId: tenantId,
       },
       orderBy: {
         dataPagamento: 'desc',
       },
-      take: 12,
     });
 
+    // Get recent payments (last 12) for display
+    const recentPayments = allPayments.slice(0, 12);
+
+    // Get invoices for financial overview
+    const invoices = await this.prisma.invoice.findMany({
+      where: {
+        contractId: contract?.id,
+      },
+      orderBy: {
+        dueDate: 'desc',
+      },
+    });
+
+    // Calculate financial overview
+    const totalPaid = allPayments
+      .filter((p: any) => p.status === 'PAGO' || p.status === 'PAID')
+      .reduce((sum: number, p: any) => sum + Number(p.valorPago || 0), 0);
+
+    const pendingInvoices = invoices.filter((inv: any) => 
+      ['PENDING', 'OVERDUE'].includes(inv.status)
+    );
+    const totalPending = pendingInvoices.reduce((sum: number, inv: any) => 
+      sum + Number(inv.updatedValue || inv.originalValue || 0), 0
+    );
+
+    const overdueInvoices = invoices.filter((inv: any) => 
+      inv.status === 'OVERDUE' || (inv.dueDate && new Date(inv.dueDate) < now)
+    );
+    const totalOverdue = overdueInvoices.reduce((sum: number, inv: any) => 
+      sum + Number(inv.updatedValue || inv.originalValue || 0), 0
+    );
+
+    const avgPayment = allPayments.length > 0 
+      ? totalPaid / allPayments.filter((p: any) => p.status === 'PAGO' || p.status === 'PAID').length 
+      : 0;
+
+    // Calculate next due date
     let nextDueDate: Date | null = null;
     let daysUntilDue: number | null = null;
+    let upcomingDueDate: Date | null = null;
+    let daysUntilUpcoming: number | null = null;
 
     if (property?.nextDueDate) {
       nextDueDate = property.nextDueDate;
-      const now = new Date();
       daysUntilDue = Math.ceil((nextDueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    } else if (contract) {
+      // Calculate from contract dueDay
+      const dueDay = contract.dueDay || 1;
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+      const calculatedDue = new Date(currentYear, currentMonth, dueDay);
+      if (calculatedDue < now) {
+        nextDueDate = new Date(currentYear, currentMonth + 1, dueDay);
+      } else {
+        nextDueDate = calculatedDue;
+      }
+      daysUntilDue = Math.ceil((nextDueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    }
+
+    // Check for upcoming due date (7 days before)
+    if (nextDueDate) {
+      const sevenDaysBefore = new Date(nextDueDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+      if (now >= sevenDaysBefore && now < nextDueDate) {
+        upcomingDueDate = nextDueDate;
+        daysUntilUpcoming = daysUntilDue;
+      }
     }
 
     return {
@@ -805,13 +969,26 @@ export class DashboardService {
         monthlyRent: contract.monthlyRent,
         status: contract.status,
         lastPaymentDate: contract.lastPaymentDate,
+        property: contract.property,
       } : null,
-      paymentHistory: payments.map((payment: any) => ({
+      paymentHistory: recentPayments.map((payment: any) => ({
         id: payment.id.toString(),
         amount: payment.valorPago,
         date: payment.dataPagamento,
         type: payment.tipo,
+        status: payment.status,
       })),
+      financialOverview: {
+        totalPaid,
+        totalPending,
+        totalOverdue,
+        averagePayment: avgPayment,
+        totalPayments: allPayments.filter((p: any) => p.status === 'PAGO' || p.status === 'PAID').length,
+        pendingCount: pendingInvoices.length,
+        overdueCount: overdueInvoices.length,
+      },
+      upcomingDueDate,
+      daysUntilUpcoming,
     };
   }
 
@@ -1130,7 +1307,20 @@ export class DashboardService {
       }),
       this.prisma.contract.findMany({
         where: contractWhere,
-        include: {
+        select: {
+          id: true,
+          status: true,
+          monthlyRent: true,
+          lastPaymentDate: true,
+          startDate: true,
+          endDate: true,
+          tenantSignature: true,
+          tenantSignedAt: true,
+          ownerSignature: true,
+          ownerSignedAt: true,
+          agencyId: true,
+          agencySignature: true,
+          agencySignedAt: true,
           property: {
             select: {
               id: true,
@@ -1247,7 +1437,20 @@ export class DashboardService {
             ...(userAgencyId ? { agencyId: BigInt(userAgencyId) } : {}),
           },
         },
-        include: {
+        select: {
+          id: true,
+          status: true,
+          monthlyRent: true,
+          lastPaymentDate: true,
+          startDate: true,
+          endDate: true,
+          tenantSignature: true,
+          tenantSignedAt: true,
+          ownerSignature: true,
+          ownerSignedAt: true,
+          agencyId: true,
+          agencySignature: true,
+          agencySignedAt: true,
           property: {
             select: {
               id: true,
@@ -1297,10 +1500,20 @@ export class DashboardService {
       }),
     ]);
 
+    // Helper function to check if contract is fully signed
+    const isFullySigned = (contract: any): boolean => {
+      const hasTenant = !!contract.tenantSignature && !!contract.tenantSignedAt;
+      const hasOwner = !!contract.ownerSignature && !!contract.ownerSignedAt;
+      const hasAgency = !contract.agencyId || (!!contract.agencySignature && !!contract.agencySignedAt);
+      return hasTenant && hasOwner && hasAgency;
+    };
+
+    // Pending contracts: fully signed AND active AND overdue
     const pendingContracts = contracts.filter((contract: any) => {
       const status = (contract.status || '').toUpperCase();
       const isActive = status === 'ATIVO' || status === 'ACTIVE' || status === 'ASSINADO' || status === 'SIGNED';
       if (!isActive) return false;
+      if (!isFullySigned(contract)) return false; // Only count fully signed contracts
       if (!contract.lastPaymentDate) return true;
       return contract.lastPaymentDate < thirtyDaysAgo;
     });
@@ -1524,6 +1737,51 @@ export class DashboardService {
       };
     } catch (error: any) {
       console.error('Error in acknowledgeExtrajudicial:', error);
+      throw error;
+    }
+  }
+
+  async acknowledgeBanner(
+    userId: string,
+    data: {
+      type: 'UPCOMING_DUE' | 'OVERDUE' | 'EXTRAJUDICIAL' | 'AGREEMENT';
+      itemId?: string;
+      ipAddress: string;
+      userAgent: string;
+    },
+  ) {
+    try {
+      const tenantId = BigInt(userId);
+      const now = new Date();
+
+      // Create audit log entry for banner acknowledgment
+      await this.prisma.auditLog.create({
+        data: {
+          event: 'TENANT_BANNER_ACKNOWLEDGED',
+          entity: 'banner',
+          entityId: data.itemId ? BigInt(data.itemId) : BigInt(0),
+          userId: tenantId,
+          ip: data.ipAddress || null,
+          userAgent: data.userAgent || null,
+          dataAfter: JSON.stringify({
+            bannerType: data.type,
+            itemId: data.itemId,
+            ipAddress: data.ipAddress,
+            userAgent: data.userAgent,
+            acknowledgedAt: now.toISOString(),
+            legalPurpose: 'Proof of tenant acknowledgment for legal validity',
+          }),
+        },
+      });
+
+      return {
+        success: true,
+        message: 'Ciência do banner registrada com sucesso',
+        timestamp: now,
+        legalNote: 'Este registro serve como comprovação legal de ciência e notificação.',
+      };
+    } catch (error: any) {
+      console.error('Error in acknowledgeBanner:', error);
       throw error;
     }
   }

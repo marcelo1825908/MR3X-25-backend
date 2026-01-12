@@ -5,6 +5,7 @@ import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { PlansModule } from '../plans/plans.module';
 import { CommonModule } from '../common/common.module';
+import { DocumentValidationService } from './services/document-validation.service';
 
 @Module({
   imports: [
@@ -26,7 +27,7 @@ import { CommonModule } from '../common/common.module';
     }),
   ],
   controllers: [UsersController],
-  providers: [UsersService],
-  exports: [UsersService],
+  providers: [UsersService, DocumentValidationService],
+  exports: [UsersService, DocumentValidationService],
 })
 export class UsersModule {}

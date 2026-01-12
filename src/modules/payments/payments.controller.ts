@@ -93,7 +93,8 @@ export class PaymentsController {
     @Param('id') id: string,
     @CurrentUser('sub') userId: string,
     @CurrentUser('role') role: string,
+    @CurrentUser('agencyId') agencyId?: string,
   ) {
-    return this.paymentsService.remove(id, userId, role);
+    return this.paymentsService.remove(id, userId, role, agencyId);
   }
 }

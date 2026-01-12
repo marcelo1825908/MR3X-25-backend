@@ -3,6 +3,7 @@ import { PrismaService } from '../../config/prisma.service';
 import { CreateInvoiceDto, InvoiceStatus } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto, MarkAsPaidDto, CancelInvoiceDto } from './dto/update-invoice.dto';
 import { ContractCalculationsService } from '../contracts/contract-calculations.service';
+import { TokenGeneratorService, TokenEntityType } from '../common/services/token-generator.service';
 import { Decimal } from '@prisma/client/runtime/library';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class InvoicesService {
   constructor(
     private prisma: PrismaService,
     private calculationsService: ContractCalculationsService,
+    private tokenGenerator: TokenGeneratorService,
   ) {}
 
   private serializeInvoice(invoice: any) {
@@ -385,6 +387,9 @@ export class InvoicesService {
     const random = Math.random().toString(36).substring(2, 7).toUpperCase();
     const invoiceNumber = `INV-${year}${month}-${random}`;
 
+    // Generate fiscal token for invoice (MR3X-FAT-2025-XXXX-XXXX)
+    const fiscalToken = await this.tokenGenerator.generateToken(TokenEntityType.INVOICE_FAT);
+
     const invoice = await this.prisma.invoice.create({
       data: {
         contractId: BigInt(data.contractId),
@@ -393,6 +398,7 @@ export class InvoicesService {
         tenantId: data.tenantId ? BigInt(data.tenantId) : contract.tenantId,
         ownerId: data.ownerId ? BigInt(data.ownerId) : contract.ownerId,
         invoiceNumber,
+        token: fiscalToken,
         referenceMonth: data.referenceMonth,
         description: data.description,
         type: data.type,

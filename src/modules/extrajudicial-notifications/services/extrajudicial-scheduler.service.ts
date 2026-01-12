@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../../config/prisma.service';
 import { ExtrajudicialNotificationsService } from '../extrajudicial-notifications.service';
+import { LegalValidationService } from './legal-validation.service';
 import * as crypto from 'crypto';
 
 interface OverdueContract {
@@ -67,6 +68,7 @@ export class ExtrajudicialSchedulerService {
   constructor(
     private prisma: PrismaService,
     private extrajudicialService: ExtrajudicialNotificationsService,
+    private legalValidation: LegalValidationService,
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_6AM)
@@ -411,11 +413,14 @@ ${creditor.document ? `CPF/CNPJ: ${creditor.document}` : ''}
 NOTIFICANTE
     `.trim();
 
-    const legalBasis = `
+    // Use LegalValidationService to enhance legal basis
+    const baseLegalBasis = `
+- Artigos 1.336, inciso IV, e 1.337 do Código Civil Brasileiro (Lei 10.406/2002)
 - Lei nº 8.245/1991 (Lei do Inquilinato), artigos 9º, III e 62
 - Código Civil, artigos 389, 395 e 406 (mora e inadimplemento)
 - Código de Processo Civil, artigos 726 e seguintes (notificação extrajudicial)
     `.trim();
+    const legalBasis = this.legalValidation.enhanceLegalBasis(baseLegalBasis, 'COBRANCA_ALUGUEL');
 
     const demandedAction = `
 Pagamento integral do débito no valor de ${formatCurrency(totalAmount)} no prazo de ${legalDeadlineDays} dias úteis a contar do recebimento desta notificação, sob pena de adoção das medidas judiciais cabíveis, incluindo ação de despejo por falta de pagamento e negativação nos órgãos de proteção ao crédito.
