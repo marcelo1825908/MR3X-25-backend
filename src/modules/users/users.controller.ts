@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards, Req, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards, Req, UseInterceptors, UploadedFile, ForbiddenException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiConsumes } from '@nestjs/swagger';
 import { UsersService } from './users.service';
@@ -131,17 +131,32 @@ export class UsersController {
   }
 
   @Patch('owners/:ownerId/fee')
-  @Roles(UserRole.AGENCY_ADMIN)
+  @Roles(UserRole.AGENCY_ADMIN, UserRole.CEO, UserRole.ADMIN, UserRole.INDEPENDENT_OWNER)
   @ApiOperation({ summary: 'Update owner fee percentage' })
   async updateOwnerFee(
     @Param('ownerId') ownerId: string,
     @Body('ownerFee') ownerFee: number,
     @CurrentUser() user: any
   ) {
-    if (!user?.agencyId) {
-      throw new Error('Agência não encontrada');
+    // For INDEPENDENT_OWNER, they can only update their own fee
+    if (user?.role === 'INDEPENDENT_OWNER' && user?.sub !== ownerId) {
+      throw new ForbiddenException('Você só pode atualizar sua própria taxa');
     }
-    return this.usersService.updateOwnerFee(ownerId, ownerFee, user.agencyId.toString());
+    
+    // For CEO/ADMIN, they can update any owner's fee
+    if (['CEO', 'ADMIN'].includes(user?.role)) {
+      return this.usersService.updateOwnerFee(ownerId, ownerFee, null);
+    }
+    
+    // For AGENCY_ADMIN, verify owner belongs to their agency
+    if (user?.role === 'AGENCY_ADMIN') {
+      if (!user?.agencyId) {
+        throw new Error('Agência não encontrada');
+      }
+      return this.usersService.updateOwnerFee(ownerId, ownerFee, user.agencyId.toString());
+    }
+    
+    throw new ForbiddenException('Você não tem permissão para atualizar esta taxa');
   }
 
   @Get('tenants')

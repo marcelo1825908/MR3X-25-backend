@@ -121,6 +121,7 @@ export class AuditService {
       ip: item.ip,
       userAgent: item.userAgent,
       timestamp: item.timestamp,
+      integrityHash: item.integrityHash,
       user: item.user
         ? {
             id: item.user.id.toString(),
@@ -168,6 +169,7 @@ export class AuditService {
       ip: auditLog.ip,
       userAgent: auditLog.userAgent,
       timestamp: auditLog.timestamp,
+      integrityHash: auditLog.integrityHash,
       user: auditLog.user
         ? {
             id: auditLog.user.id.toString(),
@@ -194,6 +196,11 @@ export class AuditService {
     ip?: string;
     userAgent?: string;
   }) {
+    // Generate integrity hash for this audit log entry
+    const timestamp = new Date().toISOString();
+    const hashData = `${data.event}|${data.userId}|${data.entity}|${data.entityId}|${data.dataBefore || ''}|${data.dataAfter || ''}|${data.ip || ''}|${timestamp}`;
+    const integrityHash = crypto.createHash('sha256').update(hashData).digest('hex');
+
     const auditLog = await this.prisma.auditLog.create({
       data: {
         event: data.event,
@@ -204,6 +211,7 @@ export class AuditService {
         dataAfter: data.dataAfter,
         ip: data.ip,
         userAgent: data.userAgent,
+        integrityHash,
       },
       include: {
         user: {
@@ -227,6 +235,7 @@ export class AuditService {
       ip: auditLog.ip,
       userAgent: auditLog.userAgent,
       timestamp: auditLog.timestamp,
+      integrityHash: auditLog.integrityHash,
       user: auditLog.user
         ? {
             id: auditLog.user.id.toString(),
@@ -291,6 +300,7 @@ export class AuditService {
       ip: item.ip,
       userAgent: item.userAgent,
       timestamp: item.timestamp.toISOString(),
+      integrityHash: item.integrityHash,
       user: item.user
         ? {
             id: item.user.id.toString(),
@@ -360,6 +370,7 @@ export class AuditService {
       'Perfil',
       'IP',
       'User Agent',
+      'Hash de Integridade',
       'Dados Antes',
       'Dados Depois',
     ];
@@ -375,6 +386,7 @@ export class AuditService {
       item.user?.role || 'UNKNOWN',
       item.ip || '',
       item.userAgent || '',
+      item.integrityHash || '',
       item.dataBefore ? JSON.stringify(item.dataBefore).replace(/"/g, '""') : '',
       item.dataAfter ? JSON.stringify(item.dataAfter).replace(/"/g, '""') : '',
     ]);
@@ -444,6 +456,10 @@ export class AuditService {
           }
           if (log.userAgent) {
             doc.text(`User Agent: ${log.userAgent.substring(0, 80)}${log.userAgent.length > 80 ? '...' : ''}`);
+          }
+          if (log.integrityHash) {
+            doc.font('Helvetica-Bold').text(`Hash de Integridade: ${log.integrityHash}`);
+            doc.font('Helvetica');
           }
           if (log.dataBefore || log.dataAfter) {
             doc.moveDown(0.3);

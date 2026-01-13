@@ -2259,13 +2259,24 @@ export class PlanEnforcementService {
     agencyId: string,
     action: string,
     details: any,
+    userId?: string,
+    ip?: string,
   ): Promise<void> {
+    const crypto = require('crypto');
+    const timestamp = new Date().toISOString();
+    const dataAfter = JSON.stringify(details);
+    const hashData = `${action}|${userId || 'system'}|Agency|${agencyId}|${dataAfter}|${ip || ''}|${timestamp}`;
+    const integrityHash = crypto.createHash('sha256').update(hashData).digest('hex');
+    
     await this.prisma.auditLog.create({
       data: {
         event: action,
+        userId: userId ? BigInt(userId) : null,
         entity: 'Agency',
         entityId: BigInt(agencyId),
-        dataAfter: JSON.stringify(details),
+        dataAfter,
+        ip: ip || null,
+        integrityHash,
       },
     });
   }

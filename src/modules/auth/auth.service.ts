@@ -124,8 +124,12 @@ export class AuthService {
       },
     });
 
-    // Log login event to audit
+    // Log login event to audit with integrity hash
     try {
+      const loginTime = new Date().toISOString();
+      const hashData = `LOGIN|${user.id.toString()}|USER|${user.id.toString()}|${ip || ''}|${loginTime}`;
+      const integrityHash = crypto.createHash('sha256').update(hashData).digest('hex');
+      
       await this.prisma.auditLog.create({
         data: {
           event: 'LOGIN',
@@ -134,8 +138,9 @@ export class AuthService {
           entityId: user.id,
           ip: ip || null,
           userAgent: userAgent || null,
+          integrityHash,
           dataAfter: JSON.stringify({
-            loginTime: new Date().toISOString(),
+            loginTime,
             role: user.role,
             agencyId: user.agencyId?.toString(),
           }),
@@ -324,18 +329,24 @@ export class AuthService {
       });
     }
 
-    // Log logout event to audit
+    // Log logout event to audit with integrity hash
     try {
+      const logoutTime = new Date().toISOString();
+      const userIdBigInt = BigInt(userId);
+      const hashData = `LOGOUT|${userId}|USER|${userId}|${ip || ''}|${logoutTime}`;
+      const integrityHash = crypto.createHash('sha256').update(hashData).digest('hex');
+      
       await this.prisma.auditLog.create({
         data: {
           event: 'LOGOUT',
-          userId: userId,
+          userId: userIdBigInt,
           entity: 'USER',
-          entityId: userId,
+          entityId: userIdBigInt,
           ip: ip || null,
           userAgent: userAgent || null,
+          integrityHash,
           dataAfter: JSON.stringify({
-            logoutTime: new Date().toISOString(),
+            logoutTime,
           }),
         },
       });

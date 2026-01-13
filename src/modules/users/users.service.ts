@@ -1646,18 +1646,31 @@ export class UsersService {
     }));
   }
 
-  async updateOwnerFee(ownerId: string, ownerFee: number, agencyId: string) {
-    // Verify owner belongs to this agency
+  async updateOwnerFee(ownerId: string, ownerFee: number, agencyId: string | null) {
+    // Build where clause based on whether agencyId is provided
+    const where: any = {
+      id: BigInt(ownerId),
+    };
+
+    // If agencyId is provided (AGENCY_ADMIN case), verify owner belongs to this agency
+    if (agencyId) {
+      where.role = UserRole.PROPRIETARIO;
+      where.agencyId = BigInt(agencyId);
+    } else {
+      // For CEO/ADMIN or INDEPENDENT_OWNER, allow updating PROPRIETARIO or INDEPENDENT_OWNER
+      where.role = { in: [UserRole.PROPRIETARIO, UserRole.INDEPENDENT_OWNER] };
+    }
+
     const owner = await this.prisma.user.findFirst({
-      where: {
-        id: BigInt(ownerId),
-        role: UserRole.PROPRIETARIO,
-        agencyId: BigInt(agencyId),
-      },
+      where,
     });
 
     if (!owner) {
-      throw new NotFoundException('Proprietário não encontrado nesta agência');
+      if (agencyId) {
+        throw new NotFoundException('Proprietário não encontrado nesta agência');
+      } else {
+        throw new NotFoundException('Proprietário não encontrado');
+      }
     }
 
     if (ownerFee < 0 || ownerFee > 100) {
